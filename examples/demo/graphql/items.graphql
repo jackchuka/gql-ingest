@@ -1,0 +1,7 @@
+mutation CreateItem($name: String!, $sku: String!) {
+  createItem(input: { name: $name, sku: $sku }) {
+    id
+    name
+    sku
+  }
+}

@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "jackchuka"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
