@@ -1,0 +1,8 @@
+{
+  "csvFile": "data/items.csv",
+  "graphqlFile": "graphql/items.graphql",
+  "mapping": {
+    "name": "item_name",
+    "sku": "item_sku"
+  }
+}
