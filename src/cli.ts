@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
+import { MetricsCollector } from "./metrics";
 
 const program = new Command();
 
@@ -28,11 +29,14 @@ program
       // Parse headers if provided
       const headers = options.headers ? JSON.parse(options.headers) : {};
 
+      // Initialize metrics collector
+      const metrics = new MetricsCollector();
+
       // Initialize GraphQL client
-      const client = new GraphQLClientWrapper(options.endpoint, headers);
+      const client = new GraphQLClientWrapper(options.endpoint, headers, metrics);
 
       // Initialize data mapper
-      const mapper = new DataMapper(client);
+      const mapper = new DataMapper(client, process.cwd(), metrics);
 
       // Discover all mapping files dynamically
       const mappingPaths = mapper.discoverMappings(options.config);
@@ -50,7 +54,9 @@ program
         }
       }
 
+      metrics.finishProcessing();
       console.log("Seed data generation completed!");
+      console.log(metrics.generateSummary());
     } catch (error) {
       console.error("Error:", error);
       process.exit(1);

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { DataMapper } from "./mapper";
 import { GraphQLClientWrapper } from "./graphql-client";
+import { MetricsCollector } from "./metrics";
 
 jest.mock("fs");
 jest.mock("./csv-reader");
@@ -10,6 +11,7 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 
 describe("DataMapper", () => {
   let mockClient: jest.Mocked<GraphQLClientWrapper>;
+  let mockMetrics: jest.Mocked<MetricsCollector>;
   let dataMapper: DataMapper;
   const testBasePath = "/test/base/path";
 
@@ -19,7 +21,15 @@ describe("DataMapper", () => {
       setHeaders: jest.fn(),
     } as any;
 
-    dataMapper = new DataMapper(mockClient, testBasePath);
+    mockMetrics = {
+      startEntityProcessing: jest.fn(),
+      recordSuccess: jest.fn(),
+      recordFailure: jest.fn(),
+      finishEntityProcessing: jest.fn(),
+      getMetrics: jest.fn(),
+    } as any;
+
+    dataMapper = new DataMapper(mockClient, testBasePath, mockMetrics);
   });
 
   afterEach(() => {
@@ -251,6 +261,71 @@ describe("DataMapper", () => {
         name: "John",
         email: "john@example.com",
       });
+    });
+
+    it("should call metrics methods during successful processing", async () => {
+      const mockConfig = {
+        csvFile: "data/users.csv",
+        graphqlFile: "graphql/users.graphql",
+        mapping: { name: "user_name" },
+      };
+
+      const mockCsvData = [{ user_name: "John" }, { user_name: "Jane" }];
+      const mockMutation = "mutation CreateUser($name: String!) { createUser(input: { name: $name }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { readCsvFile } = require("./csv-reader");
+      readCsvFile.mockResolvedValue(mockCsvData);
+
+      mockClient.executeMutation.mockResolvedValue({ createUser: { id: "123" } });
+
+      await dataMapper.processEntity("configs/test/mappings/users.json");
+
+      expect(mockMetrics.startEntityProcessing).toHaveBeenCalledWith("users");
+      expect(mockMetrics.recordSuccess).toHaveBeenCalledTimes(2);
+      expect(mockMetrics.recordSuccess).toHaveBeenCalledWith("users");
+      expect(mockMetrics.finishEntityProcessing).toHaveBeenCalledWith("users");
+      expect(mockMetrics.recordFailure).not.toHaveBeenCalled();
+    });
+
+    it("should call metrics methods during failed processing", async () => {
+      const mockConfig = {
+        csvFile: "data/users.csv",
+        graphqlFile: "graphql/users.graphql",
+        mapping: { name: "user_name" },
+      };
+
+      const mockCsvData = [{ user_name: "John" }];
+      const mockMutation = "mutation CreateUser($name: String!) { createUser(input: { name: $name }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { readCsvFile } = require("./csv-reader");
+      readCsvFile.mockResolvedValue(mockCsvData);
+
+      mockClient.executeMutation.mockRejectedValue(new Error("GraphQL error"));
+
+      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+
+      await dataMapper.processEntity("configs/test/mappings/users.json");
+
+      expect(mockMetrics.startEntityProcessing).toHaveBeenCalledWith("users");
+      expect(mockMetrics.recordFailure).toHaveBeenCalledTimes(1);
+      expect(mockMetrics.recordFailure).toHaveBeenCalledWith("users");
+      expect(mockMetrics.finishEntityProcessing).toHaveBeenCalledWith("users");
+      expect(mockMetrics.recordSuccess).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should expose metrics through getMetrics method", () => {
+      const metrics = dataMapper.getMetrics();
+      expect(metrics).toBe(mockMetrics);
     });
   });
 });
