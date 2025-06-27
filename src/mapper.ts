@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { readCsvFile, CsvRow } from './csv-reader';
 import { GraphQLClientWrapper } from './graphql-client';
+import { MetricsCollector } from './metrics';
 
 export interface MappingConfig {
   csvFile: string;
@@ -12,10 +13,12 @@ export interface MappingConfig {
 export class DataMapper {
   private client: GraphQLClientWrapper;
   private basePath: string;
+  private metrics: MetricsCollector;
 
-  constructor(client: GraphQLClientWrapper, basePath: string = process.cwd()) {
+  constructor(client: GraphQLClientWrapper, basePath: string = process.cwd(), metrics?: MetricsCollector) {
     this.client = client;
     this.basePath = basePath;
+    this.metrics = metrics || new MetricsCollector();
   }
 
   discoverMappings(configDir: string): string[] {
@@ -36,7 +39,10 @@ export class DataMapper {
   }
 
   async processEntity(configPath: string): Promise<void> {
+    const entityName = path.basename(configPath, '.json');
     console.log(`Processing entity: ${configPath}`);
+    
+    this.metrics.startEntityProcessing(entityName);
     
     // Read mapping configuration
     const configFullPath = path.resolve(this.basePath, configPath);
@@ -59,11 +65,15 @@ export class DataMapper {
       
       try {
         const result = await this.client.executeMutation(mutation, variables);
+        this.metrics.recordSuccess(entityName);
         console.log(`✓ Created entity with result:`, result);
       } catch (error) {
+        this.metrics.recordFailure(entityName);
         console.error(`✗ Failed to create entity for row:`, row, error);
       }
     }
+    
+    this.metrics.finishEntityProcessing(entityName);
   }
 
   private mapCsvRowToVariables(row: CsvRow, mapping: Record<string, string>): Record<string, any> {
@@ -76,5 +86,9 @@ export class DataMapper {
     }
     
     return variables;
+  }
+
+  getMetrics(): MetricsCollector {
+    return this.metrics;
   }
 }
