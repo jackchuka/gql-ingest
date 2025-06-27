@@ -6,6 +6,16 @@ import { loadConfig, getEntityConfig } from "./config";
 import { DependencyResolver } from "./dependency-resolver";
 import { basename } from "path";
 
+// Utility function to chunk array into smaller arrays
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  if (chunkSize <= 0) return [array];
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
 const program = new Command();
 
 program
@@ -81,10 +91,10 @@ program
       }
 
       // Process entities in dependency-aware waves
-      if (config.parallelProcessing.enableEntityParallelization) {
-        await processEntitiesInWaves(mappingPaths, resolver, mapper, config);
-      } else {
+      if (config.parallelProcessing.entityConcurrency === 1) {
         await processEntitiesSequentially(mappingPaths, mapper, config);
+      } else {
+        await processEntitiesInWaves(mappingPaths, resolver, mapper, config);
       }
 
       metrics.finishProcessing();
@@ -129,22 +139,12 @@ async function processEntitiesInWaves(
       `Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`
     );
 
-    if (config.parallelProcessing.preserveEntityOrder) {
-      // Process entities in this wave sequentially
-      for (const entityName of wave.entities) {
-        const configPath = pathMap.get(entityName);
-        if (configPath) {
-          try {
-            const entityConfig = getEntityConfig(entityName, config);
-            await mapper.processEntity(configPath, entityConfig);
-          } catch (error) {
-            console.warn(`Warning: Could not process ${configPath}:`, error);
-          }
-        }
-      }
-    } else {
-      // Process entities in this wave concurrently
-      const entityPromises = wave.entities.map(async (entityName) => {
+    // Process entities in controlled batches based on entityConcurrency
+    const entityConcurrency = config.parallelProcessing.entityConcurrency;
+    const chunks = chunkArray(wave.entities, entityConcurrency);
+    
+    for (const chunk of chunks) {
+      const entityPromises = chunk.map(async (entityName) => {
         const configPath = pathMap.get(entityName);
         if (configPath) {
           try {
