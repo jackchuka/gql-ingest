@@ -25,6 +25,7 @@ program
     "-h, --headers <headers>",
     "JSON string of headers to include in requests"
   )
+  .option("-v, --verbose", "Show detailed request results and responses")
   .action(async (options) => {
     try {
       console.log("Starting seed data generation...");
@@ -39,14 +40,20 @@ program
       const client = new GraphQLClientWrapper(
         options.endpoint,
         headers,
-        metrics
+        metrics,
+        options.verbose
       );
 
       // Load configuration
       const config = loadConfig(options.config);
 
       // Initialize data mapper
-      const mapper = new DataMapper(client, process.cwd(), metrics);
+      const mapper = new DataMapper(
+        client,
+        process.cwd(),
+        metrics,
+        options.verbose
+      );
 
       // Discover all mapping files dynamically
       const mappingPaths = mapper.discoverMappings(options.config);
@@ -81,7 +88,6 @@ program
       }
 
       metrics.finishProcessing();
-      console.log("Seed data generation completed!");
       console.log(metrics.generateSummary());
     } catch (error) {
       console.error("Error:", error);

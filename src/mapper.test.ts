@@ -175,7 +175,7 @@ describe("DataMapper", () => {
       await dataMapper.processEntity("configs/test/mappings/users.json");
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        "✗ Failed to create entity for row:",
+        "✗ Failed to create entity for row 1:",
         { user_name: "John" },
         expect.any(Error)
       );
@@ -271,7 +271,8 @@ describe("DataMapper", () => {
       };
 
       const mockCsvData = [{ user_name: "John" }, { user_name: "Jane" }];
-      const mockMutation = "mutation CreateUser($name: String!) { createUser(input: { name: $name }) { id } }";
+      const mockMutation =
+        "mutation CreateUser($name: String!) { createUser(input: { name: $name }) { id } }";
 
       mockFs.readFileSync
         .mockReturnValueOnce(JSON.stringify(mockConfig))
@@ -280,7 +281,9 @@ describe("DataMapper", () => {
       const { readCsvFile } = require("./csv-reader");
       readCsvFile.mockResolvedValue(mockCsvData);
 
-      mockClient.executeMutation.mockResolvedValue({ createUser: { id: "123" } });
+      mockClient.executeMutation.mockResolvedValue({
+        createUser: { id: "123" },
+      });
 
       await dataMapper.processEntity("configs/test/mappings/users.json");
 
@@ -299,7 +302,8 @@ describe("DataMapper", () => {
       };
 
       const mockCsvData = [{ user_name: "John" }];
-      const mockMutation = "mutation CreateUser($name: String!) { createUser(input: { name: $name }) { id } }";
+      const mockMutation =
+        "mutation CreateUser($name: String!) { createUser(input: { name: $name }) { id } }";
 
       mockFs.readFileSync
         .mockReturnValueOnce(JSON.stringify(mockConfig))

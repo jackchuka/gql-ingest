@@ -15,15 +15,18 @@ export class DataMapper {
   private client: GraphQLClientWrapper;
   private basePath: string;
   private metrics: MetricsCollector;
+  private verbose: boolean;
 
   constructor(
     client: GraphQLClientWrapper,
     basePath: string = process.cwd(),
-    metrics?: MetricsCollector
+    metrics?: MetricsCollector,
+    verbose: boolean = false
   ) {
     this.client = client;
     this.basePath = basePath;
     this.metrics = metrics || new MetricsCollector();
+    this.verbose = verbose;
   }
 
   discoverMappings(configDir: string): string[] {
@@ -96,16 +99,26 @@ export class DataMapper {
     mapping: Record<string, string>,
     entityName: string
   ): Promise<void> {
-    for (const row of csvData) {
+    const totalRows = csvData.length;
+    
+    for (let i = 0; i < csvData.length; i++) {
+      const row = csvData[i];
       const variables = this.mapCsvRowToVariables(row, mapping);
 
       try {
-        const result = await this.client.executeMutation(mutation, variables);
+        await this.client.executeMutation(mutation, variables);
         this.metrics.recordSuccess(entityName);
-        console.log(`✓ Created entity with result:`, result);
+        
+        // Show progress every 10% or at the end (only in non-verbose mode)
+        if (!this.verbose && ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1)) {
+          const progress = (((i + 1) / totalRows) * 100).toFixed(1);
+          console.log(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
+        }
       } catch (error) {
         this.metrics.recordFailure(entityName);
-        console.error(`✗ Failed to create entity for row:`, row, error);
+        if (!this.verbose) {
+          console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
+        }
       }
     }
   }
@@ -124,8 +137,11 @@ export class DataMapper {
 
     // Split data into chunks for concurrent processing
     const chunks = this.chunkArray(csvData, concurrency);
+    let processedCount = 0;
+    const totalRows = csvData.length;
 
-    for (const chunk of chunks) {
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
       const promises = chunk.map(async (row) => {
         const variables = this.mapCsvRowToVariables(row, mapping);
 
@@ -140,20 +156,36 @@ export class DataMapper {
       });
 
       const results = await Promise.allSettled(promises);
+      processedCount += chunk.length;
 
-      // Log results
+      // Count successes and failures in this chunk
+      let chunkSuccesses = 0;
+      let chunkFailures = 0;
+      
       results.forEach((result) => {
         if (result.status === "fulfilled") {
-          const { success, result: mutationResult, error, row } = result.value;
+          const { success, error, row } = result.value;
           if (success) {
-            console.log(`✓ Created entity with result:`, mutationResult);
+            chunkSuccesses++;
           } else {
-            console.error(`✗ Failed to create entity for row:`, row, error);
+            chunkFailures++;
+            if (!this.verbose) {
+              console.error(`✗ Failed to create entity for row:`, row, error);
+            }
           }
         } else {
-          console.error(`✗ Promise rejected:`, result.reason);
+          chunkFailures++;
+          if (!this.verbose) {
+            console.error(`✗ Promise rejected:`, result.reason);
+          }
         }
       });
+
+      // Show progress update (only in non-verbose mode)
+      if (!this.verbose) {
+        const progress = ((processedCount / totalRows) * 100).toFixed(1);
+        console.log(`📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${chunkIndex + 1}: ${chunkSuccesses} ✓, ${chunkFailures} ✗`);
+      }
     }
   }
 
