@@ -11,6 +11,7 @@ export interface ProcessingMetrics {
   totalSuccesses: number;
   totalFailures: number;
   entityMetrics: Map<string, EntityMetrics>;
+  requestDurations: number[];
   startTime: number;
   endTime?: number;
 }
@@ -24,6 +25,7 @@ export class MetricsCollector {
       totalSuccesses: 0,
       totalFailures: 0,
       entityMetrics: new Map(),
+      requestDurations: [],
       startTime: Date.now(),
     };
   }
@@ -82,6 +84,16 @@ export class MetricsCollector {
     return (this.metrics.totalSuccesses / this.metrics.totalEntities) * 100;
   }
 
+  recordRequestDuration(duration: number): void {
+    this.metrics.requestDurations.push(duration);
+  }
+
+  getAverageRequestDuration(): number {
+    if (this.metrics.requestDurations.length === 0) return 0;
+    const sum = this.metrics.requestDurations.reduce((a, b) => a + b, 0);
+    return sum / this.metrics.requestDurations.length;
+  }
+
   getDurationMs(): number {
     const endTime = this.metrics.endTime || Date.now();
     return endTime - this.metrics.startTime;
@@ -90,6 +102,7 @@ export class MetricsCollector {
   generateSummary(): string {
     const duration = this.getDurationMs();
     const successRate = this.getSuccessRate();
+    const avgRequestDuration = this.getAverageRequestDuration();
     
     let summary = `\n📊 Processing Summary:\n`;
     summary += `   Total Processed: ${this.metrics.totalEntities}\n`;
@@ -97,6 +110,10 @@ export class MetricsCollector {
     summary += `   ✗ Failures: ${this.metrics.totalFailures}\n`;
     summary += `   Success Rate: ${successRate.toFixed(1)}%\n`;
     summary += `   Duration: ${(duration / 1000).toFixed(2)}s\n`;
+    
+    if (this.metrics.requestDurations.length > 0) {
+      summary += `   Avg Request Time: ${avgRequestDuration.toFixed(0)}ms\n`;
+    }
 
     if (this.metrics.entityMetrics.size > 1) {
       summary += `\n📋 Per-Entity Breakdown:\n`;

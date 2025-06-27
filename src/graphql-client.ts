@@ -20,14 +20,14 @@ export class GraphQLClientWrapper {
       
       if (this.metrics) {
         const duration = Date.now() - startTime;
-        console.debug(`GraphQL request completed in ${duration}ms`);
+        this.metrics.recordRequestDuration(duration);
       }
       
       return result;
     } catch (error) {
       if (this.metrics) {
         const duration = Date.now() - startTime;
-        console.debug(`GraphQL request failed in ${duration}ms`);
+        this.metrics.recordRequestDuration(duration);
       }
       
       console.error('GraphQL mutation failed:', error);
