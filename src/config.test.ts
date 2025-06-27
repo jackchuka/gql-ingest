@@ -32,7 +32,7 @@ describe("Configuration", () => {
       const yamlContent = `
 parallelProcessing:
   concurrency: 5
-  enableEntityParallelization: true
+  entityConcurrency: 3
 
 entityConfig:
   users:
@@ -49,7 +49,7 @@ entityDependencies:
       const config = loadConfig(testConfigDir);
 
       expect(config.parallelProcessing.concurrency).toBe(5);
-      expect(config.parallelProcessing.enableEntityParallelization).toBe(true);
+      expect(config.parallelProcessing.entityConcurrency).toBe(3);
       expect(config.entityConfig.users.concurrency).toBe(2);
       expect(config.entityConfig.users.preserveRowOrder).toBe(true);
       expect(config.entityDependencies.products).toEqual(["users"]);
@@ -71,7 +71,7 @@ entityConfig:
 
       // Should merge with defaults
       expect(config.parallelProcessing.concurrency).toBe(10);
-      expect(config.parallelProcessing.enableEntityParallelization).toBe(false); // default
+      expect(config.parallelProcessing.entityConcurrency).toBe(1); // default
       expect(config.parallelProcessing.preserveRowOrder).toBe(true); // default
     });
 
@@ -114,9 +114,8 @@ entityConfig:
     const globalConfig = {
       parallelProcessing: {
         concurrency: 10,
-        enableEntityParallelization: true,
+        entityConcurrency: 3,
         preserveRowOrder: false,
-        preserveEntityOrder: false,
       },
       entityConfig: {
         users: {
@@ -140,7 +139,7 @@ entityConfig:
       const entityConfig = getEntityConfig("products", globalConfig);
 
       expect(entityConfig.concurrency).toBe(20); // overridden
-      expect(entityConfig.enableEntityParallelization).toBe(true); // from global
+      expect(entityConfig.entityConcurrency).toBe(3); // from global
       expect(entityConfig.preserveRowOrder).toBe(false); // from global
     });
 

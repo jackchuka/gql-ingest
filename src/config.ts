@@ -4,9 +4,8 @@ import * as yaml from "js-yaml";
 
 export interface ParallelProcessingConfig {
   concurrency: number;
-  enableEntityParallelization: boolean;
+  entityConcurrency: number;
   preserveRowOrder: boolean;
-  preserveEntityOrder: boolean;
 }
 
 export interface EntityConfig {
@@ -26,9 +25,8 @@ export interface FullConfig extends ProcessingConfig {
 
 export const DEFAULT_PARALLEL_CONFIG: ParallelProcessingConfig = {
   concurrency: 1,
-  enableEntityParallelization: false,
+  entityConcurrency: 1,
   preserveRowOrder: true,
-  preserveEntityOrder: true,
 };
 
 export const DEFAULT_CONFIG: ProcessingConfig = {

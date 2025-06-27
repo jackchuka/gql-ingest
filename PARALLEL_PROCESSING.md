@@ -17,9 +17,8 @@ Add a `config.yaml` file to your configuration directory (same directory as `map
 # Global parallel processing settings
 parallelProcessing:
   concurrency: 10 # Max concurrent requests per entity (>1 enables parallel row processing)
-  enableEntityParallelization: true # Enable concurrent entity processing
+  entityConcurrency: 3 # Max concurrent entities processed simultaneously
   preserveRowOrder: false # Allow rows to complete out of order
-  preserveEntityOrder: false # Allow entities within waves to be concurrent
 
 # Per-entity overrides
 entityConfig:
@@ -39,12 +38,13 @@ entityDependencies:
 
 ### Global Settings (`parallelProcessing`)
 
-| Option                        | Type    | Default | Description                                                                 |
-| ----------------------------- | ------- | ------- | --------------------------------------------------------------------------- |
-| `concurrency`                 | number  | 1       | Maximum concurrent requests per entity (>1 enables parallel row processing) |
-| `enableEntityParallelization` | boolean | false   | Enable concurrent entity processing                                         |
-| `preserveRowOrder`            | boolean | true    | Maintain CSV row order (forces concurrency=1)                               |
-| `preserveEntityOrder`         | boolean | true    | Process entities within waves sequentially                                  |
+| Option              | Type    | Default | Description                                                                 |
+| ------------------- | ------- | ------- | --------------------------------------------------------------------------- |
+| `concurrency`       | number  | 1       | Maximum concurrent requests per entity (>1 enables parallel row processing) |
+| `entityConcurrency` | number  | 1       | Maximum concurrent entities processed simultaneously                        |
+| `preserveRowOrder`  | boolean | true    | Maintain CSV row order (forces concurrency=1)                               |
+
+**Key Insight**: `entityConcurrency` replaces the previous confusing `enableEntityParallelization` and `preserveEntityOrder` boolean settings. Higher values = more entities processed simultaneously.
 
 ### Entity Overrides (`entityConfig`)
 
@@ -87,16 +87,17 @@ entityDependencies:
 
 ### Wave Processing
 
-Within each wave, `preserveEntityOrder` controls concurrency:
+Within each wave, `entityConcurrency` controls how many entities can process simultaneously:
 
-- **`preserveEntityOrder: false`** - Entities in wave processed concurrently
-- **`preserveEntityOrder: true`** - Entities in wave processed sequentially
+- **`entityConcurrency: 1`** - Entities in wave processed sequentially (one at a time)
+- **`entityConcurrency: 3`** - Up to 3 entities in wave processed concurrently
+- **`entityConcurrency: 10`** - Up to 10 entities in wave processed concurrently
 
 **Important**: Wave boundaries are always respected. Wave 2 never starts until Wave 1 is complete.
 
-## Row Order vs Entity Order
+## Row vs Entity Concurrency
 
-### Row Order (`preserveRowOrder`)
+### Row Concurrency (`concurrency`)
 
 Controls processing within a single entity:
 
@@ -110,20 +111,20 @@ products:
   concurrency: 10 # Can process 10 rows concurrently
 ```
 
-### Entity Order (`preserveEntityOrder`)
+### Entity Concurrency (`entityConcurrency`)
 
-Controls processing within dependency waves:
+Controls how many entities can process simultaneously within dependency waves:
 
 ```yaml
-preserveEntityOrder: true
-# Wave 1: [users, categories] - processed sequentially
+entityConcurrency: 1
+# Wave 1: [users, categories] - processed one at a time
 # Wave 2: [products] - single entity
-# Wave 3: [orders, reviews] - processed sequentially
+# Wave 3: [orders, reviews] - processed one at a time
 
-preserveEntityOrder: false
-# Wave 1: [users, categories] - processed concurrently
+entityConcurrency: 3
+# Wave 1: [users, categories] - both processed concurrently (2 entities)
 # Wave 2: [products] - single entity
-# Wave 3: [orders, reviews] - processed concurrently
+# Wave 3: [orders, reviews] - both processed concurrently (2 entities)
 ```
 
 ## Performance Guidelines
@@ -175,9 +176,8 @@ Higher concurrency uses more memory:
 ```yaml
 parallelProcessing:
   concurrency: 20 # High concurrency enables parallel row processing
-  enableEntityParallelization: true
+  entityConcurrency: 5 # Process up to 5 entities simultaneously
   preserveRowOrder: false
-  preserveEntityOrder: false
 
 entityConfig:
   users:
@@ -191,9 +191,8 @@ entityConfig:
 ```yaml
 parallelProcessing:
   concurrency: 2 # Low concurrency with parallel processing
-  enableEntityParallelization: false # Process entities one at a time
+  entityConcurrency: 1 # Process entities one at a time
   preserveRowOrder: true
-  preserveEntityOrder: true
 
 entityDependencies:
   products: ["users"]
@@ -205,7 +204,7 @@ entityDependencies:
 ```yaml
 parallelProcessing:
   concurrency: 10 # Moderate concurrency enables parallel processing
-  enableEntityParallelization: true
+  entityConcurrency: 2 # Process up to 2 entities simultaneously
 
 entityConfig:
   # Sensitive data - preserve order
