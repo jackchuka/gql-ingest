@@ -4,12 +4,14 @@ import { MetricsCollector } from './metrics';
 export class GraphQLClientWrapper {
   private client: GraphQLClient;
   private metrics?: MetricsCollector;
+  private verbose: boolean;
 
-  constructor(endpoint: string, headers?: Record<string, string>, metrics?: MetricsCollector) {
+  constructor(endpoint: string, headers?: Record<string, string>, metrics?: MetricsCollector, verbose: boolean = false) {
     this.client = new GraphQLClient(endpoint, {
       headers: headers || {}
     });
     this.metrics = metrics;
+    this.verbose = verbose;
   }
 
   async executeMutation(mutation: string, variables: Record<string, any>): Promise<any> {
@@ -23,6 +25,10 @@ export class GraphQLClientWrapper {
         this.metrics.recordRequestDuration(duration);
       }
       
+      if (this.verbose) {
+        console.log(`✓ GraphQL request completed in ${Date.now() - startTime}ms:`, result);
+      }
+      
       return result;
     } catch (error) {
       if (this.metrics) {
@@ -30,7 +36,11 @@ export class GraphQLClientWrapper {
         this.metrics.recordRequestDuration(duration);
       }
       
-      console.error('GraphQL mutation failed:', error);
+      if (this.verbose) {
+        console.error(`✗ GraphQL request failed in ${Date.now() - startTime}ms:`, error);
+      } else {
+        console.error('GraphQL mutation failed:', error);
+      }
       throw error;
     }
   }

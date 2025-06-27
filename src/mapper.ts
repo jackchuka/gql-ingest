@@ -15,15 +15,18 @@ export class DataMapper {
   private client: GraphQLClientWrapper;
   private basePath: string;
   private metrics: MetricsCollector;
+  private verbose: boolean;
 
   constructor(
     client: GraphQLClientWrapper,
     basePath: string = process.cwd(),
-    metrics?: MetricsCollector
+    metrics?: MetricsCollector,
+    verbose: boolean = false
   ) {
     this.client = client;
     this.basePath = basePath;
     this.metrics = metrics || new MetricsCollector();
+    this.verbose = verbose;
   }
 
   discoverMappings(configDir: string): string[] {
@@ -106,14 +109,16 @@ export class DataMapper {
         await this.client.executeMutation(mutation, variables);
         this.metrics.recordSuccess(entityName);
         
-        // Show progress every 10% or at the end
-        if ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1) {
+        // Show progress every 10% or at the end (only in non-verbose mode)
+        if (!this.verbose && ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1)) {
           const progress = (((i + 1) / totalRows) * 100).toFixed(1);
           console.log(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
         }
       } catch (error) {
         this.metrics.recordFailure(entityName);
-        console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
+        if (!this.verbose) {
+          console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
+        }
       }
     }
   }
@@ -164,17 +169,23 @@ export class DataMapper {
             chunkSuccesses++;
           } else {
             chunkFailures++;
-            console.error(`✗ Failed to create entity for row:`, row, error);
+            if (!this.verbose) {
+              console.error(`✗ Failed to create entity for row:`, row, error);
+            }
           }
         } else {
           chunkFailures++;
-          console.error(`✗ Promise rejected:`, result.reason);
+          if (!this.verbose) {
+            console.error(`✗ Promise rejected:`, result.reason);
+          }
         }
       });
 
-      // Show progress update
-      const progress = ((processedCount / totalRows) * 100).toFixed(1);
-      console.log(`📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${chunkIndex + 1}: ${chunkSuccesses} ✓, ${chunkFailures} ✗`);
+      // Show progress update (only in non-verbose mode)
+      if (!this.verbose) {
+        const progress = ((processedCount / totalRows) * 100).toFixed(1);
+        console.log(`📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${chunkIndex + 1}: ${chunkSuccesses} ✓, ${chunkFailures} ✗`);
+      }
     }
   }
 
