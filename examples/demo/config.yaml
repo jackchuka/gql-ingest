@@ -1,0 +1,45 @@
+# Parallel Processing Configuration Example
+# This file demonstrates the parallel processing capabilities of gql-ingest
+
+# Global parallel processing settings
+parallelProcessing:
+  concurrency: 10 # Concurrent requests per entity (>1 enables parallel row processing)
+  enableEntityParallelization: true # Enable concurrent entity processing
+  preserveRowOrder: false # Allow rows to complete out of order for better performance
+  preserveEntityOrder: false # Allow entities to complete out of order
+
+# Per-entity configuration overrides
+entityConfig:
+  # Process items with higher concurrency for bulk operations
+  items:
+    concurrency: 20 # Higher concurrency for bulk data
+    preserveRowOrder: false # Order doesn't matter for items
+
+  # Process users with lower concurrency and preserve order for sensitive data
+  users:
+    preserveRowOrder: true # Maintain CSV row order, sets concurrency to 1 automatically
+
+# Entity dependency management
+# Dependencies create execution waves for data integrity
+# Wave boundaries are always respected regardless of preserveEntityOrder setting
+entityDependencies:
+  # Items must be processed after users are complete
+  items: ["users"]
+# Interaction between preserveEntityOrder and entityDependencies:
+# - entityDependencies: Creates execution waves (safety constraints for data integrity)
+# - preserveEntityOrder: Controls concurrency WITHIN each wave (performance optimization)
+# - Dependencies always take precedence over entity order preferences
+#
+# Example execution flow with this configuration:
+# Wave 1: users (sequential due to preserveRowOrder=true)
+# Wave 2: items (concurrent=20, starts after Wave 1 completes)
+#
+# If preserveEntityOrder=true and multiple entities in same wave:
+# Wave entities would be processed sequentially within the wave
+# If preserveEntityOrder=false and multiple entities in same wave:
+# Wave entities would be processed concurrently within the wave
+
+# Performance expectations:
+# - Sequential mode: ~1 request per 100ms = 10 requests/second
+# - With concurrency=10: ~10 requests per 100ms = 100 requests/second
+# - With concurrency=20: ~20 requests per 100ms = 200 requests/second

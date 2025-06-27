@@ -2,6 +2,9 @@ import { Command } from "commander";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
 import { MetricsCollector } from "./metrics";
+import { loadConfig, getEntityConfig } from "./config";
+import { DependencyResolver } from "./dependency-resolver";
+import { basename } from "path";
 
 const program = new Command();
 
@@ -22,6 +25,7 @@ program
     "-h, --headers <headers>",
     "JSON string of headers to include in requests"
   )
+  .option("-v, --verbose", "Show detailed request results and responses")
   .action(async (options) => {
     try {
       console.log("Starting seed data generation...");
@@ -33,10 +37,23 @@ program
       const metrics = new MetricsCollector();
 
       // Initialize GraphQL client
-      const client = new GraphQLClientWrapper(options.endpoint, headers, metrics);
+      const client = new GraphQLClientWrapper(
+        options.endpoint,
+        headers,
+        metrics,
+        options.verbose
+      );
+
+      // Load configuration
+      const config = loadConfig(options.config);
 
       // Initialize data mapper
-      const mapper = new DataMapper(client, process.cwd(), metrics);
+      const mapper = new DataMapper(
+        client,
+        process.cwd(),
+        metrics,
+        options.verbose
+      );
 
       // Discover all mapping files dynamically
       const mappingPaths = mapper.discoverMappings(options.config);
@@ -46,21 +63,102 @@ program
         return;
       }
 
-      for (const configPath of mappingPaths) {
-        try {
-          await mapper.processEntity(configPath);
-        } catch (error) {
-          console.warn(`Warning: Could not process ${configPath}:`, error);
-        }
+      // Extract entity names from mapping paths
+      const entityNames = mappingPaths.map((path) => basename(path, ".json"));
+
+      // Setup dependency resolver
+      const resolver = new DependencyResolver(
+        entityNames,
+        config.entityDependencies
+      );
+
+      // Validate dependencies
+      const validationErrors = resolver.validateDependencies();
+      if (validationErrors.length > 0) {
+        console.error("Dependency validation errors:");
+        validationErrors.forEach((error) => console.error(`  - ${error}`));
+        process.exit(1);
+      }
+
+      // Process entities in dependency-aware waves
+      if (config.parallelProcessing.enableEntityParallelization) {
+        await processEntitiesInWaves(mappingPaths, resolver, mapper, config);
+      } else {
+        await processEntitiesSequentially(mappingPaths, mapper, config);
       }
 
       metrics.finishProcessing();
-      console.log("Seed data generation completed!");
       console.log(metrics.generateSummary());
     } catch (error) {
       console.error("Error:", error);
       process.exit(1);
     }
   });
+
+async function processEntitiesSequentially(
+  mappingPaths: string[],
+  mapper: DataMapper,
+  config: ReturnType<typeof loadConfig>
+): Promise<void> {
+  for (const configPath of mappingPaths) {
+    try {
+      const entityName = basename(configPath, ".json");
+      const entityConfig = getEntityConfig(entityName, config);
+      await mapper.processEntity(configPath, entityConfig);
+    } catch (error) {
+      console.warn(`Warning: Could not process ${configPath}:`, error);
+    }
+  }
+}
+
+async function processEntitiesInWaves(
+  mappingPaths: string[],
+  resolver: DependencyResolver,
+  mapper: DataMapper,
+  config: ReturnType<typeof loadConfig>
+): Promise<void> {
+  const waves = resolver.resolveExecutionOrder();
+  const pathMap = new Map(
+    mappingPaths.map((path) => [basename(path, ".json"), path])
+  );
+
+  console.log(`Processing ${waves.length} dependency waves...`);
+
+  for (const wave of waves) {
+    console.log(
+      `Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`
+    );
+
+    if (config.parallelProcessing.preserveEntityOrder) {
+      // Process entities in this wave sequentially
+      for (const entityName of wave.entities) {
+        const configPath = pathMap.get(entityName);
+        if (configPath) {
+          try {
+            const entityConfig = getEntityConfig(entityName, config);
+            await mapper.processEntity(configPath, entityConfig);
+          } catch (error) {
+            console.warn(`Warning: Could not process ${configPath}:`, error);
+          }
+        }
+      }
+    } else {
+      // Process entities in this wave concurrently
+      const entityPromises = wave.entities.map(async (entityName) => {
+        const configPath = pathMap.get(entityName);
+        if (configPath) {
+          try {
+            const entityConfig = getEntityConfig(entityName, config);
+            await mapper.processEntity(configPath, entityConfig);
+          } catch (error) {
+            console.warn(`Warning: Could not process ${configPath}:`, error);
+          }
+        }
+      });
+
+      await Promise.allSettled(entityPromises);
+    }
+  }
+}
 
 program.parse();
