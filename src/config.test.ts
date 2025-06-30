@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { loadConfig, getEntityConfig, DEFAULT_CONFIG } from "./config";
+import { loadConfig, getEntityConfig, getRetryConfig, DEFAULT_CONFIG } from "./config";
 
 jest.mock("fs");
 const mockFs = fs as jest.Mocked<typeof fs>;
@@ -112,6 +112,13 @@ entityConfig:
 
   describe("getEntityConfig", () => {
     const globalConfig = {
+      retry: {
+        maxAttempts: 3,
+        baseDelay: 1000,
+        maxDelay: 30000,
+        exponentialBackoff: true,
+        retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+      },
       parallelProcessing: {
         concurrency: 10,
         entityConcurrency: 3,
@@ -199,6 +206,67 @@ entityConfig:
       expect(consoleSpy).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe("getRetryConfig", () => {
+    const globalConfig = {
+      retry: {
+        maxAttempts: 3,
+        baseDelay: 1000,
+        maxDelay: 30000,
+        exponentialBackoff: true,
+        retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+      },
+      parallelProcessing: {
+        concurrency: 10,
+        entityConcurrency: 3,
+        preserveRowOrder: false,
+      },
+      entityConfig: {
+        important: {
+          retry: {
+            maxAttempts: 5,
+            baseDelay: 500,
+          },
+        },
+        fast: {
+          retry: {
+            maxAttempts: 1,
+          },
+        },
+      },
+      entityDependencies: {},
+    };
+
+    it("should return global retry config for entity without overrides", () => {
+      const retryConfig = getRetryConfig("regular", globalConfig);
+
+      expect(retryConfig).toEqual(globalConfig.retry);
+    });
+
+    it("should merge entity retry overrides with global config", () => {
+      const retryConfig = getRetryConfig("important", globalConfig);
+
+      expect(retryConfig.maxAttempts).toBe(5); // overridden
+      expect(retryConfig.baseDelay).toBe(500); // overridden
+      expect(retryConfig.maxDelay).toBe(30000); // from global
+      expect(retryConfig.exponentialBackoff).toBe(true); // from global
+      expect(retryConfig.retryableStatusCodes).toEqual([408, 429, 500, 502, 503, 504]); // from global
+    });
+
+    it("should handle partial retry overrides", () => {
+      const retryConfig = getRetryConfig("fast", globalConfig);
+
+      expect(retryConfig.maxAttempts).toBe(1); // overridden
+      expect(retryConfig.baseDelay).toBe(1000); // from global
+      expect(retryConfig.maxDelay).toBe(30000); // from global
+    });
+
+    it("should handle entity with no retry config", () => {
+      const retryConfig = getRetryConfig("undefined-entity", globalConfig);
+
+      expect(retryConfig).toEqual(globalConfig.retry);
     });
   });
 });

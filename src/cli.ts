@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
 import { MetricsCollector } from "./metrics";
-import { loadConfig, getEntityConfig } from "./config";
+import { loadConfig, getEntityConfig, getRetryConfig } from "./config";
 import { DependencyResolver } from "./dependency-resolver";
 import { basename } from "path";
 
@@ -114,7 +114,8 @@ async function processEntitiesSequentially(
     try {
       const entityName = basename(configPath, ".json");
       const entityConfig = getEntityConfig(entityName, config);
-      await mapper.processEntity(configPath, entityConfig);
+      const retryConfig = getRetryConfig(entityName, config);
+      await mapper.processEntity(configPath, entityConfig, retryConfig);
     } catch (error) {
       console.warn(`Warning: Could not process ${configPath}:`, error);
     }
@@ -142,14 +143,15 @@ async function processEntitiesInWaves(
     // Process entities in controlled batches based on entityConcurrency
     const entityConcurrency = config.parallelProcessing.entityConcurrency;
     const chunks = chunkArray(wave.entities, entityConcurrency);
-    
+
     for (const chunk of chunks) {
       const entityPromises = chunk.map(async (entityName) => {
         const configPath = pathMap.get(entityName);
         if (configPath) {
           try {
             const entityConfig = getEntityConfig(entityName, config);
-            await mapper.processEntity(configPath, entityConfig);
+            const retryConfig = getRetryConfig(entityName, config);
+            await mapper.processEntity(configPath, entityConfig, retryConfig);
           } catch (error) {
             console.warn(`Warning: Could not process ${configPath}:`, error);
           }

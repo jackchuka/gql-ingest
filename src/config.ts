@@ -8,12 +8,22 @@ export interface ParallelProcessingConfig {
   preserveRowOrder: boolean;
 }
 
+export interface RetryConfig {
+  maxAttempts: number;
+  baseDelay: number;
+  maxDelay: number;
+  exponentialBackoff: boolean;
+  retryableStatusCodes: number[];
+}
+
 export interface EntityConfig {
   concurrency?: number;
   preserveRowOrder?: boolean;
+  retry?: Partial<RetryConfig>;
 }
 
 export interface ProcessingConfig {
+  retry: RetryConfig;
   parallelProcessing: ParallelProcessingConfig;
   entityConfig: Record<string, EntityConfig>;
   entityDependencies: Record<string, string[]>;
@@ -23,6 +33,14 @@ export interface FullConfig extends ProcessingConfig {
   // Future: additional config sections can be added here
 }
 
+export const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  baseDelay: 1000,
+  maxDelay: 30000,
+  exponentialBackoff: true,
+  retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+};
+
 export const DEFAULT_PARALLEL_CONFIG: ParallelProcessingConfig = {
   concurrency: 1,
   entityConcurrency: 1,
@@ -30,6 +48,7 @@ export const DEFAULT_PARALLEL_CONFIG: ParallelProcessingConfig = {
 };
 
 export const DEFAULT_CONFIG: ProcessingConfig = {
+  retry: DEFAULT_RETRY_CONFIG,
   parallelProcessing: DEFAULT_PARALLEL_CONFIG,
   entityConfig: {},
   entityDependencies: {},
@@ -58,6 +77,10 @@ export function loadConfig(configDir: string): ProcessingConfig {
 
 function mergeWithDefaults(yamlConfig: Partial<FullConfig>): ProcessingConfig {
   return {
+    retry: {
+      ...DEFAULT_RETRY_CONFIG,
+      ...(yamlConfig.retry || {}),
+    },
     parallelProcessing: {
       ...DEFAULT_PARALLEL_CONFIG,
       ...(yamlConfig.parallelProcessing || {}),
@@ -87,4 +110,16 @@ export function getEntityConfig(
   }
 
   return finalConfig;
+}
+
+export function getRetryConfig(
+  entityName: string,
+  globalConfig: ProcessingConfig
+): RetryConfig {
+  const entityOverrides = globalConfig.entityConfig[entityName]?.retry || {};
+
+  return {
+    ...globalConfig.retry,
+    ...entityOverrides,
+  };
 }

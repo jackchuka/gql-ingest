@@ -141,11 +141,11 @@ describe("DataMapper", () => {
       expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
         name: "John",
         email: "john@example.com",
-      });
+      }, undefined);
       expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
         name: "Jane",
         email: "jane@example.com",
-      });
+      }, undefined);
 
       consoleSpy.mockRestore();
     });
@@ -223,7 +223,7 @@ describe("DataMapper", () => {
         name: "Widget",
         price: "19.99",
         sku: "W001",
-      });
+      }, undefined);
     });
 
     it("should handle missing CSV columns gracefully", async () => {
@@ -260,7 +260,7 @@ describe("DataMapper", () => {
       expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
         name: "John",
         email: "john@example.com",
-      });
+      }, undefined);
     });
 
     it("should call metrics methods during successful processing", async () => {

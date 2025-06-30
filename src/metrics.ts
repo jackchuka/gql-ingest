@@ -12,6 +12,9 @@ export interface ProcessingMetrics {
   totalFailures: number;
   entityMetrics: Map<string, EntityMetrics>;
   requestDurations: number[];
+  retryAttempts: number;
+  retrySuccesses: number;
+  retryFailures: number;
   startTime: number;
   endTime?: number;
 }
@@ -26,6 +29,9 @@ export class MetricsCollector {
       totalFailures: 0,
       entityMetrics: new Map(),
       requestDurations: [],
+      retryAttempts: 0,
+      retrySuccesses: 0,
+      retryFailures: 0,
       startTime: Date.now(),
     };
   }
@@ -88,6 +94,16 @@ export class MetricsCollector {
     this.metrics.requestDurations.push(duration);
   }
 
+  recordRetrySuccess(attempts: number): void {
+    this.metrics.retryAttempts += attempts;
+    this.metrics.retrySuccesses++;
+  }
+
+  recordRetryFailure(attempts: number): void {
+    this.metrics.retryAttempts += attempts;
+    this.metrics.retryFailures++;
+  }
+
   getAverageRequestDuration(): number {
     if (this.metrics.requestDurations.length === 0) return 0;
     const sum = this.metrics.requestDurations.reduce((a, b) => a + b, 0);
@@ -113,6 +129,12 @@ export class MetricsCollector {
     
     if (this.metrics.requestDurations.length > 0) {
       summary += `   Avg Request Time: ${avgRequestDuration.toFixed(0)}ms\n`;
+    }
+    
+    if (this.metrics.retryAttempts > 0) {
+      summary += `   Retry Attempts: ${this.metrics.retryAttempts}\n`;
+      summary += `   Retry Successes: ${this.metrics.retrySuccesses}\n`;
+      summary += `   Retry Failures: ${this.metrics.retryFailures}\n`;
     }
 
     if (this.metrics.entityMetrics.size > 1) {
