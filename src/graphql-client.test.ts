@@ -63,7 +63,7 @@ describe("GraphQLClientWrapper", () => {
       clientWrapper.executeMutation(mutation, variables)
     ).rejects.toThrow("GraphQL error");
 
-    expect(consoleSpy).toHaveBeenCalledWith("GraphQL mutation failed:", error);
+    expect(consoleSpy).toHaveBeenCalledWith("GraphQL mutation failed after 3 attempts:", error);
 
     consoleSpy.mockRestore();
   });
@@ -74,5 +74,131 @@ describe("GraphQLClientWrapper", () => {
     clientWrapper.setHeaders(newHeaders);
 
     expect(mockSetHeaders).toHaveBeenCalledWith(newHeaders);
+  });
+
+  describe("retry functionality", () => {
+    it("should retry on retryable status codes", async () => {
+      const mutation = "mutation { createUser(name: $name) { id } }";
+      const variables = { name: "John" };
+      const retryConfig = {
+        maxAttempts: 3,
+        baseDelay: 100,
+        maxDelay: 1000,
+        exponentialBackoff: false,
+        retryableStatusCodes: [500],
+      };
+
+      const serverError = new Error("Server Error");
+      (serverError as any).response = { status: 500 };
+
+      mockRequest
+        .mockRejectedValueOnce(serverError)
+        .mockRejectedValueOnce(serverError)
+        .mockResolvedValueOnce({ data: { result: "success" } });
+
+      const result = await clientWrapper.executeMutation(mutation, variables, retryConfig);
+
+      expect(mockRequest).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({ data: { result: "success" } });
+    });
+
+    it("should not retry on non-retryable status codes", async () => {
+      const mutation = "mutation { createUser(name: $name) { id } }";
+      const variables = { name: "John" };
+      const retryConfig = {
+        maxAttempts: 3,
+        baseDelay: 100,
+        maxDelay: 1000,
+        exponentialBackoff: false,
+        retryableStatusCodes: [500],
+      };
+
+      const clientError = new Error("Bad Request");
+      (clientError as any).response = { status: 400 };
+
+      mockRequest.mockRejectedValueOnce(clientError);
+
+      await expect(
+        clientWrapper.executeMutation(mutation, variables, retryConfig)
+      ).rejects.toThrow("Bad Request");
+
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it("should retry on network errors (no response)", async () => {
+      const mutation = "mutation { createUser(name: $name) { id } }";
+      const variables = { name: "John" };
+      const retryConfig = {
+        maxAttempts: 2,
+        baseDelay: 100,
+        maxDelay: 1000,
+        exponentialBackoff: false,
+        retryableStatusCodes: [500],
+      };
+
+      const networkError = new Error("Network Error");
+      // No response property = network error
+
+      mockRequest
+        .mockRejectedValueOnce(networkError)
+        .mockResolvedValueOnce({ data: { result: "success" } });
+
+      const result = await clientWrapper.executeMutation(mutation, variables, retryConfig);
+
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ data: { result: "success" } });
+    });
+
+    it("should fail after max attempts are exhausted", async () => {
+      const mutation = "mutation { createUser(name: $name) { id } }";
+      const variables = { name: "John" };
+      const retryConfig = {
+        maxAttempts: 2,
+        baseDelay: 100,
+        maxDelay: 1000,
+        exponentialBackoff: false,
+        retryableStatusCodes: [500],
+      };
+
+      const serverError = new Error("Server Error");
+      (serverError as any).response = { status: 500 };
+
+      mockRequest.mockRejectedValue(serverError);
+
+      await expect(
+        clientWrapper.executeMutation(mutation, variables, retryConfig)
+      ).rejects.toThrow("Server Error");
+
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    it("should use exponential backoff when configured", async () => {
+      const mutation = "mutation { createUser(name: $name) { id } }";
+      const variables = { name: "John" };
+      const retryConfig = {
+        maxAttempts: 3,
+        baseDelay: 100,
+        maxDelay: 1000,
+        exponentialBackoff: true,
+        retryableStatusCodes: [500],
+      };
+
+      const serverError = new Error("Server Error");
+      (serverError as any).response = { status: 500 };
+
+      mockRequest
+        .mockRejectedValueOnce(serverError)
+        .mockRejectedValueOnce(serverError)
+        .mockResolvedValueOnce({ data: { result: "success" } });
+
+      const startTime = Date.now();
+      const result = await clientWrapper.executeMutation(mutation, variables, retryConfig);
+      const totalTime = Date.now() - startTime;
+
+      expect(mockRequest).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({ data: { result: "success" } });
+      // Should have some delay for retries (base + exponential)
+      expect(totalTime).toBeGreaterThan(200); // At least 100ms base + 200ms exponential
+    });
   });
 });

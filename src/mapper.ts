@@ -3,7 +3,7 @@ import path from "path";
 import { readCsvFile, CsvRow } from "./csv-reader";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
-import { ParallelProcessingConfig } from "./config";
+import { ParallelProcessingConfig, RetryConfig } from "./config";
 
 export interface MappingConfig {
   csvFile: string;
@@ -48,7 +48,8 @@ export class DataMapper {
 
   async processEntity(
     configPath: string,
-    parallelConfig?: ParallelProcessingConfig
+    parallelConfig?: ParallelProcessingConfig,
+    retryConfig?: RetryConfig
   ): Promise<void> {
     const entityName = path.basename(configPath, ".json");
     console.log(`Processing entity: ${configPath}`);
@@ -79,14 +80,16 @@ export class DataMapper {
         mutation,
         config.mapping,
         entityName,
-        parallelConfig
+        parallelConfig,
+        retryConfig
       );
     } else {
       await this.processRowsSequentially(
         csvData,
         mutation,
         config.mapping,
-        entityName
+        entityName,
+        retryConfig
       );
     }
 
@@ -97,7 +100,8 @@ export class DataMapper {
     csvData: CsvRow[],
     mutation: string,
     mapping: Record<string, string>,
-    entityName: string
+    entityName: string,
+    retryConfig?: RetryConfig
   ): Promise<void> {
     const totalRows = csvData.length;
     
@@ -106,7 +110,7 @@ export class DataMapper {
       const variables = this.mapCsvRowToVariables(row, mapping);
 
       try {
-        await this.client.executeMutation(mutation, variables);
+        await this.client.executeMutation(mutation, variables, retryConfig);
         this.metrics.recordSuccess(entityName);
         
         // Show progress every 10% or at the end (only in non-verbose mode)
@@ -128,7 +132,8 @@ export class DataMapper {
     mutation: string,
     mapping: Record<string, string>,
     entityName: string,
-    parallelConfig: ParallelProcessingConfig
+    parallelConfig: ParallelProcessingConfig,
+    retryConfig?: RetryConfig
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
     console.log(
@@ -146,7 +151,7 @@ export class DataMapper {
         const variables = this.mapCsvRowToVariables(row, mapping);
 
         try {
-          const result = await this.client.executeMutation(mutation, variables);
+          const result = await this.client.executeMutation(mutation, variables, retryConfig);
           this.metrics.recordSuccess(entityName);
           return { success: true, result, row };
         } catch (error) {
