@@ -331,5 +331,226 @@ describe("DataMapper", () => {
       const metrics = dataMapper.getMetrics();
       expect(metrics).toBe(mockMetrics);
     });
+
+    it("should convert numeric types from CSV strings to proper GraphQL types", async () => {
+      const mockConfig = {
+        csvFile: "data/products.csv",
+        graphqlFile: "graphql/products.graphql",
+        mapping: {
+          name: "product_name",
+          price: "product_price",
+          quantity: "product_quantity",
+          active: "product_active",
+        },
+      };
+
+      const mockCsvData = [
+        {
+          product_name: "Widget",
+          product_price: "19.99",
+          product_quantity: "10",
+          product_active: "true",
+        },
+      ];
+
+      const mockMutation = `
+        mutation CreateProduct($name: String!, $price: Float!, $quantity: Int!, $active: Boolean!) {
+          createProduct(input: { name: $name, price: $price, quantity: $quantity, active: $active }) {
+            id
+          }
+        }
+      `;
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { readCsvFile } = require("./csv-reader");
+      readCsvFile.mockResolvedValue(mockCsvData);
+
+      mockClient.executeMutation.mockResolvedValue({
+        createProduct: { id: "123" },
+      });
+
+      await dataMapper.processEntity("configs/test/mappings/products.json");
+
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
+        name: "Widget",
+        price: 19.99,
+        quantity: 10,
+        active: true,
+      }, undefined);
+    });
+
+    it("should handle invalid numeric conversions gracefully", async () => {
+      const mockConfig = {
+        csvFile: "data/products.csv",
+        graphqlFile: "graphql/products.graphql",
+        mapping: {
+          name: "product_name",
+          price: "product_price",
+          quantity: "product_quantity",
+        },
+      };
+
+      const mockCsvData = [
+        {
+          product_name: "Widget",
+          product_price: "invalid_price",
+          product_quantity: "invalid_quantity",
+        },
+      ];
+
+      const mockMutation = `
+        mutation CreateProduct($name: String!, $price: Float!, $quantity: Int!) {
+          createProduct(input: { name: $name, price: $price, quantity: $quantity }) {
+            id
+          }
+        }
+      `;
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { readCsvFile } = require("./csv-reader");
+      readCsvFile.mockResolvedValue(mockCsvData);
+
+      mockClient.executeMutation.mockResolvedValue({
+        createProduct: { id: "123" },
+      });
+
+      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+
+      await dataMapper.processEntity("configs/test/mappings/products.json");
+
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
+        name: "Widget",
+        price: "invalid_price",
+        quantity: "invalid_quantity",
+      }, undefined);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Warning: Cannot convert "invalid_price" to Float for variable $price. Expected a valid number. Using original value.'
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Warning: Cannot convert "invalid_quantity" to Int for variable $quantity. Expected a valid integer. Using original value.'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should handle edge cases in numeric conversion safely", async () => {
+      const mockConfig = {
+        csvFile: "data/products.csv",
+        graphqlFile: "graphql/products.graphql",
+        mapping: {
+          int_field: "int_value",
+          float_field: "float_value",
+        },
+      };
+
+      const mockCsvData = [
+        {
+          int_value: "1.5", // Float in Int field - should remain string
+          float_value: "Infinity", // Invalid float - should remain string
+        },
+        {
+          int_value: "not_a_number", // Invalid int - should remain string
+          float_value: "1.2.3", // Invalid number format - should remain string
+        },
+      ];
+
+      const mockMutation = `
+        mutation CreateProduct($int_field: Int!, $float_field: Float!) {
+          createProduct(input: { int_field: $int_field, float_field: $float_field }) {
+            id
+          }
+        }
+      `;
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { readCsvFile } = require("./csv-reader");
+      readCsvFile.mockResolvedValue(mockCsvData);
+
+      mockClient.executeMutation.mockResolvedValue({
+        createProduct: { id: "123" },
+      });
+
+      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+
+      await dataMapper.processEntity("configs/test/mappings/products.json");
+
+      // Should keep invalid values as strings
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
+        int_field: "1.5",
+        float_field: "Infinity",
+      }, undefined);
+
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
+        int_field: "not_a_number",
+        float_field: "1.2.3",
+      }, undefined);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should keep unknown scalar types as strings", async () => {
+      const mockConfig = {
+        csvFile: "data/products.csv",
+        graphqlFile: "graphql/products.graphql",
+        mapping: {
+          name: "product_name",
+          custom_field: "custom_value",
+        },
+      };
+
+      const mockCsvData = [
+        {
+          product_name: "Widget",
+          custom_value: "123",
+        },
+      ];
+
+      const mockMutation = `
+        mutation CreateProduct($name: String!, $custom_field: CustomScalar!) {
+          createProduct(input: { name: $name, custom_field: $custom_field }) {
+            id
+          }
+        }
+      `;
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { readCsvFile } = require("./csv-reader");
+      readCsvFile.mockResolvedValue(mockCsvData);
+
+      mockClient.executeMutation.mockResolvedValue({
+        createProduct: { id: "123" },
+      });
+
+      // Create verbose mapper to test the logging
+      const verboseMapper = new DataMapper(mockClient, testBasePath, mockMetrics, true);
+      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+
+      await verboseMapper.processEntity("configs/test/mappings/products.json");
+
+      // Should keep custom scalar as string
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
+        name: "Widget",
+        custom_field: "123",
+      }, undefined);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Unknown GraphQL type "CustomScalar" for variable $custom_field. Keeping value as string.'
+      );
+
+      consoleSpy.mockRestore();
+    });
   });
 });
