@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { parse, DocumentNode, VariableDefinitionNode } from "graphql";
 import { readCsvFile, CsvRow } from "./csv-reader";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
@@ -104,24 +105,33 @@ export class DataMapper {
     retryConfig?: RetryConfig
   ): Promise<void> {
     const totalRows = csvData.length;
-    
+    const variableTypes = this.extractVariableTypes(mutation);
+
     for (let i = 0; i < csvData.length; i++) {
       const row = csvData[i];
-      const variables = this.mapCsvRowToVariables(row, mapping);
+      const variables = this.mapCsvRowToVariables(row, mapping, variableTypes);
 
       try {
         await this.client.executeMutation(mutation, variables, retryConfig);
         this.metrics.recordSuccess(entityName);
-        
+
         // Show progress every 10% or at the end (only in non-verbose mode)
-        if (!this.verbose && ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1)) {
+        if (
+          !this.verbose &&
+          ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 ||
+            i === totalRows - 1)
+        ) {
           const progress = (((i + 1) / totalRows) * 100).toFixed(1);
           console.log(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
         }
       } catch (error) {
         this.metrics.recordFailure(entityName);
         if (!this.verbose) {
-          console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
+          console.error(
+            `✗ Failed to create entity for row ${i + 1}:`,
+            row,
+            error
+          );
         }
       }
     }
@@ -140,6 +150,9 @@ export class DataMapper {
       `Processing ${csvData.length} rows with concurrency: ${concurrency}`
     );
 
+    // Extract variable types once for all rows
+    const variableTypes = this.extractVariableTypes(mutation);
+
     // Split data into chunks for concurrent processing
     const chunks = this.chunkArray(csvData, concurrency);
     let processedCount = 0;
@@ -148,10 +161,14 @@ export class DataMapper {
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
       const promises = chunk.map(async (row) => {
-        const variables = this.mapCsvRowToVariables(row, mapping);
+        const variables = this.mapCsvRowToVariables(row, mapping, variableTypes);
 
         try {
-          const result = await this.client.executeMutation(mutation, variables, retryConfig);
+          const result = await this.client.executeMutation(
+            mutation,
+            variables,
+            retryConfig
+          );
           this.metrics.recordSuccess(entityName);
           return { success: true, result, row };
         } catch (error) {
@@ -166,7 +183,7 @@ export class DataMapper {
       // Count successes and failures in this chunk
       let chunkSuccesses = 0;
       let chunkFailures = 0;
-      
+
       results.forEach((result) => {
         if (result.status === "fulfilled") {
           const { success, error, row } = result.value;
@@ -189,7 +206,11 @@ export class DataMapper {
       // Show progress update (only in non-verbose mode)
       if (!this.verbose) {
         const progress = ((processedCount / totalRows) * 100).toFixed(1);
-        console.log(`📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${chunkIndex + 1}: ${chunkSuccesses} ✓, ${chunkFailures} ✗`);
+        console.log(
+          `📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${
+            chunkIndex + 1
+          }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`
+        );
       }
     }
   }
@@ -204,17 +225,118 @@ export class DataMapper {
 
   private mapCsvRowToVariables(
     row: CsvRow,
-    mapping: Record<string, string>
+    mapping: Record<string, string>,
+    variableTypes: Record<string, string>
   ): Record<string, any> {
     const variables: Record<string, any> = {};
 
     for (const [graphqlVar, csvColumn] of Object.entries(mapping)) {
       if (row[csvColumn] !== undefined) {
-        variables[graphqlVar] = row[csvColumn];
+        const rawValue = row[csvColumn];
+        const type = variableTypes[graphqlVar];
+        variables[graphqlVar] = this.convertValue(rawValue, type, graphqlVar);
       }
     }
 
     return variables;
+  }
+
+  private extractVariableTypes(mutation: string): Record<string, string> {
+    const types: Record<string, string> = {};
+
+    try {
+      const document: DocumentNode = parse(mutation);
+
+      // Find the operation (mutation/query) and extract variable definitions
+      for (const definition of document.definitions) {
+        if (
+          definition.kind === "OperationDefinition" &&
+          definition.variableDefinitions
+        ) {
+          for (const variableDef of definition.variableDefinitions) {
+            const varName = variableDef.variable.name.value;
+            const typeName = this.extractTypeName(variableDef);
+            if (typeName) {
+              types[varName] = typeName;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing GraphQL mutation:", error);
+    }
+
+    return types;
+  }
+
+  private extractTypeName(variableDef: VariableDefinitionNode): string | null {
+    const type = variableDef.type;
+
+    if (type.kind === "NonNullType") {
+      // Handle non-null types like String!
+      if (type.type.kind === "NamedType") {
+        return type.type.name.value;
+      }
+    } else if (type.kind === "NamedType") {
+      // Handle nullable types like String
+      return type.name.value;
+    }
+
+    return null;
+  }
+
+  private convertValue(value: string, type: string | undefined, varName: string): any {
+    if (!type) {
+      // No type information available, keep as string
+      return value;
+    }
+
+    const trimmedValue = value.trim();
+
+    switch (type) {
+      case "Int":
+        const intValue = Number(trimmedValue);
+        // Validate that it's a valid integer (no decimals, NaN, or Infinity)
+        if (isNaN(intValue) || !isFinite(intValue) || !Number.isInteger(intValue)) {
+          console.warn(
+            `Warning: Cannot convert "${value}" to Int for variable $${varName}. Expected a valid integer. Using original value.`
+          );
+          return value;
+        }
+        return intValue;
+
+      case "Float":
+        const floatValue = Number(trimmedValue);
+        // Number() is more strict than parseFloat() - it requires the entire string to be valid
+        if (isNaN(floatValue) || !isFinite(floatValue)) {
+          console.warn(
+            `Warning: Cannot convert "${value}" to Float for variable $${varName}. Expected a valid number. Using original value.`
+          );
+          return value;
+        }
+        return floatValue;
+
+      case "Boolean":
+        const lowerValue = trimmedValue.toLowerCase();
+        if (lowerValue === "true" || lowerValue === "1") return true;
+        if (lowerValue === "false" || lowerValue === "0") return false;
+        console.warn(
+          `Warning: Cannot convert "${value}" to Boolean for variable $${varName}. Expected "true", "false", "1", or "0". Using original value.`
+        );
+        return value;
+
+      case "String":
+        return value;
+
+      default:
+        // Unknown scalar type - keep as string for safety
+        if (this.verbose) {
+          console.log(
+            `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`
+          );
+        }
+        return value;
+    }
   }
 
   getMetrics(): MetricsCollector {
