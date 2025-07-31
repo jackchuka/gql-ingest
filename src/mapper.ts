@@ -1,15 +1,19 @@
 import fs from "fs";
 import path from "path";
 import { parse, DocumentNode, VariableDefinitionNode } from "graphql";
-import { readCsvFile, CsvRow } from "./csv-reader";
+import { DataReaderFactory, DataRow } from "./readers";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
 import { ParallelProcessingConfig, RetryConfig } from "./config";
 
 export interface MappingConfig {
-  csvFile: string;
+  // Legacy CSV support
+  csvFile?: string;
+  // New flexible data file support
+  dataFile?: string;
+  dataFormat?: string;
   graphqlFile: string;
-  mapping: Record<string, string>;
+  mapping: Record<string, string | any>;
 }
 
 export class DataMapper {
@@ -17,17 +21,20 @@ export class DataMapper {
   private basePath: string;
   private metrics: MetricsCollector;
   private verbose: boolean;
+  private formatOverride?: string;
 
   constructor(
     client: GraphQLClientWrapper,
     basePath: string = process.cwd(),
     metrics?: MetricsCollector,
-    verbose: boolean = false
+    verbose: boolean = false,
+    formatOverride?: string
   ) {
     this.client = client;
     this.basePath = basePath;
     this.metrics = metrics || new MetricsCollector();
     this.verbose = verbose;
+    this.formatOverride = formatOverride;
   }
 
   discoverMappings(configDir: string, entityFilter?: string[]): string[] {
@@ -93,9 +100,20 @@ export class DataMapper {
     // Extract config directory (parent of mappings directory)
     const configDir = path.dirname(path.dirname(configFullPath));
 
-    // Read CSV data (relative to config directory)
-    const csvPath = path.resolve(configDir, config.csvFile);
-    const csvData = await readCsvFile(csvPath);
+    // Determine data file path (support both legacy csvFile and new dataFile)
+    const dataFile = config.dataFile || config.csvFile;
+    if (!dataFile) {
+      throw new Error(
+        `No data file specified in mapping config: ${configPath}`
+      );
+    }
+
+    const dataPath = path.resolve(configDir, dataFile);
+
+    // Get appropriate reader (prioritize CLI format override, then config format)
+    const format = this.formatOverride || config.dataFormat;
+    const reader = DataReaderFactory.getReader(dataPath, format);
+    const data = await reader.readFile(dataPath);
 
     // Read GraphQL mutation (relative to config directory)
     const graphqlPath = path.resolve(configDir, config.graphqlFile);
@@ -104,7 +122,7 @@ export class DataMapper {
     // Process rows with optional parallelization
     if (parallelConfig && parallelConfig.concurrency > 1) {
       await this.processRowsConcurrently(
-        csvData,
+        data,
         mutation,
         config.mapping,
         entityName,
@@ -113,7 +131,7 @@ export class DataMapper {
       );
     } else {
       await this.processRowsSequentially(
-        csvData,
+        data,
         mutation,
         config.mapping,
         entityName,
@@ -125,18 +143,18 @@ export class DataMapper {
   }
 
   private async processRowsSequentially(
-    csvData: CsvRow[],
+    data: DataRow[],
     mutation: string,
-    mapping: Record<string, string>,
+    mapping: Record<string, string | any>,
     entityName: string,
     retryConfig?: RetryConfig
   ): Promise<void> {
-    const totalRows = csvData.length;
+    const totalRows = data.length;
     const variableTypes = this.extractVariableTypes(mutation);
 
-    for (let i = 0; i < csvData.length; i++) {
-      const row = csvData[i];
-      const variables = this.mapCsvRowToVariables(row, mapping, variableTypes);
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const variables = this.mapRowToVariables(row, mapping, variableTypes);
 
       try {
         await this.client.executeMutation(mutation, variables, retryConfig);
@@ -165,34 +183,30 @@ export class DataMapper {
   }
 
   private async processRowsConcurrently(
-    csvData: CsvRow[],
+    data: DataRow[],
     mutation: string,
-    mapping: Record<string, string>,
+    mapping: Record<string, string | any>,
     entityName: string,
     parallelConfig: ParallelProcessingConfig,
     retryConfig?: RetryConfig
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
     console.log(
-      `Processing ${csvData.length} rows with concurrency: ${concurrency}`
+      `Processing ${data.length} rows with concurrency: ${concurrency}`
     );
 
     // Extract variable types once for all rows
     const variableTypes = this.extractVariableTypes(mutation);
 
     // Split data into chunks for concurrent processing
-    const chunks = this.chunkArray(csvData, concurrency);
+    const chunks = this.chunkArray(data, concurrency);
     let processedCount = 0;
-    const totalRows = csvData.length;
+    const totalRows = data.length;
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
       const promises = chunk.map(async (row) => {
-        const variables = this.mapCsvRowToVariables(
-          row,
-          mapping,
-          variableTypes
-        );
+        const variables = this.mapRowToVariables(row, mapping, variableTypes);
 
         try {
           const result = await this.client.executeMutation(
@@ -254,22 +268,108 @@ export class DataMapper {
     return chunks;
   }
 
-  private mapCsvRowToVariables(
-    row: CsvRow,
-    mapping: Record<string, string>,
+  private mapRowToVariables(
+    row: DataRow,
+    mapping: Record<string, string | any>,
     variableTypes: Record<string, string>
   ): Record<string, any> {
     const variables: Record<string, any> = {};
 
-    for (const [graphqlVar, csvColumn] of Object.entries(mapping)) {
-      if (row[csvColumn] !== undefined) {
-        const rawValue = row[csvColumn];
+    for (const [graphqlVar, mappingValue] of Object.entries(mapping)) {
+      // Handle direct mapping for nested data (e.g., "input": "$")
+      if (mappingValue === "$") {
+        // Use the entire row as the variable value
+        variables[graphqlVar] = row;
+      }
+      // Handle path-based mapping for nested data (e.g., "input.name": "$.product.name")
+      else if (
+        typeof mappingValue === "string" &&
+        mappingValue.startsWith("$.")
+      ) {
+        const path = mappingValue.substring(2); // Remove '$.'
+        const value = this.getValueByPath(row, path);
+        if (value !== undefined) {
+          const type = variableTypes[graphqlVar];
+          variables[graphqlVar] = this.convertValue(value, type, graphqlVar);
+        }
+      }
+      // Handle traditional flat mapping (e.g., "name": "product_name")
+      else if (
+        typeof mappingValue === "string" &&
+        row[mappingValue] !== undefined
+      ) {
+        const rawValue = row[mappingValue];
         const type = variableTypes[graphqlVar];
         variables[graphqlVar] = this.convertValue(rawValue, type, graphqlVar);
+      }
+      // Handle complex mapping object
+      else if (typeof mappingValue === "object" && mappingValue !== null) {
+        variables[graphqlVar] = this.mapNestedObject(
+          row,
+          mappingValue,
+          variableTypes
+        );
       }
     }
 
     return variables;
+  }
+
+  private getValueByPath(obj: any, path: string): any {
+    const parts = path.split(".");
+    let current = obj;
+
+    for (const part of parts) {
+      if (current && typeof current === "object" && part in current) {
+        current = current[part];
+      } else {
+        return undefined;
+      }
+    }
+
+    return current;
+  }
+
+  private mapNestedObject(
+    row: DataRow,
+    mappingObj: any,
+    variableTypes: Record<string, string>
+  ): any {
+    if (Array.isArray(mappingObj)) {
+      return mappingObj.map((item) =>
+        this.mapNestedObject(row, item, variableTypes)
+      );
+    }
+
+    if (typeof mappingObj === "object" && mappingObj !== null) {
+      const result: any = {};
+      for (const [key, value] of Object.entries(mappingObj)) {
+        if (typeof value === "string" && value.startsWith("$.")) {
+          const path = value.substring(2);
+          let fieldValue = this.getValueByPath(row, path);
+
+          // Handle special case for array fields (e.g., comma-separated values)
+          if (
+            key === "values" &&
+            typeof fieldValue === "string" &&
+            fieldValue.includes(",")
+          ) {
+            fieldValue = fieldValue.split(",").map((v) => v.trim());
+          }
+
+          result[key] = fieldValue;
+        } else if (typeof value === "string" && row[value] !== undefined) {
+          result[key] = row[value];
+        } else if (typeof value === "object") {
+          result[key] = this.mapNestedObject(row, value, variableTypes);
+        } else {
+          result[key] = value;
+        }
+      }
+      return result;
+    }
+
+    return mappingObj;
   }
 
   private extractVariableTypes(mutation: string): Record<string, string> {
@@ -317,12 +417,17 @@ export class DataMapper {
   }
 
   private convertValue(
-    value: string,
+    value: any,
     type: string | undefined,
     varName: string
   ): any {
     if (!type) {
-      // No type information available, keep as string
+      // No type information available, keep as is
+      return value;
+    }
+
+    // For non-string values (objects, arrays), return as is
+    if (typeof value !== "string") {
       return value;
     }
 

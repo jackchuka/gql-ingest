@@ -40,6 +40,10 @@ program
     "JSON string of headers to include in requests"
   )
   .option("-v, --verbose", "Show detailed request results and responses")
+  .option(
+    "-f, --format <format>",
+    "Override data format detection (csv, json, yaml, jsonl)"
+  )
   .action(async (options) => {
     try {
       console.log("Starting seed data generation...");
@@ -66,7 +70,8 @@ program
         client,
         process.cwd(),
         metrics,
-        options.verbose
+        options.verbose,
+        options.format
       );
 
       // Parse entities filter if provided

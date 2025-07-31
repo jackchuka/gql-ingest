@@ -1,0 +1,74 @@
+[
+  {
+    "name": "Premium T-Shirt",
+    "type": "PHYSICAL",
+    "description": "High-quality cotton t-shirt",
+    "trackInventory": true,
+    "brandCode": "PREM-001",
+    "options": [
+      {
+        "name": "Color",
+        "values": ["Red", "Blue", "Green", "Black"]
+      },
+      {
+        "name": "Size",
+        "values": ["S", "M", "L", "XL"]
+      }
+    ],
+    "variants": [
+      {
+        "name": "Red Small T-Shirt",
+        "sku": "TS-RED-S",
+        "optionMappings": [
+          {
+            "name": "Color",
+            "value": "Red"
+          },
+          {
+            "name": "Size",
+            "value": "S"
+          }
+        ]
+      },
+      {
+        "name": "Blue Medium T-Shirt",
+        "sku": "TS-BLUE-M",
+        "optionMappings": [
+          {
+            "name": "Color",
+            "value": "Blue"
+          },
+          {
+            "name": "Size",
+            "value": "M"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Consulting Service",
+    "type": "SERVICE",
+    "description": "Professional consulting services",
+    "trackInventory": false,
+    "brandCode": "CONS-001",
+    "options": [
+      {
+        "name": "Duration",
+        "values": ["1 Hour", "4 Hours", "8 Hours"]
+      }
+    ],
+    "variants": [
+      {
+        "name": "1 Hour Consultation",
+        "sku": "CONS-1H",
+        "optionMappings": [
+          {
+            "name": "Duration",
+            "value": "1 Hour"
+          }
+        ]
+      }
+    ]
+  }
+]
