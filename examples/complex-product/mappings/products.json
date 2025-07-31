@@ -1,0 +1,8 @@
+{
+  "dataFile": "data/products.json",
+  "dataFormat": "json",
+  "graphqlFile": "graphql/newProduct.graphql",
+  "mapping": {
+    "input": "$"
+  }
+}

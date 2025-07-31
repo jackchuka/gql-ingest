@@ -3,9 +3,18 @@ import path from "path";
 import { DataMapper } from "./mapper";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
+import { readCsvFile, DataReaderFactory } from "./readers";
 
 jest.mock("fs");
-jest.mock("./csv-reader");
+jest.mock("./readers", () => ({
+  ...jest.requireActual("./readers"),
+  readCsvFile: jest.fn(),
+  DataReaderFactory: {
+    getReader: jest.fn().mockReturnValue({
+      readFile: jest.fn(),
+    }),
+  },
+}));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
@@ -114,8 +123,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createUser: { id: "123" },
@@ -129,8 +138,9 @@ describe("DataMapper", () => {
         path.resolve(testBasePath, "configs/test/mappings/users.json"),
         "utf8"
       );
-      expect(readCsvFile).toHaveBeenCalledWith(
-        path.resolve(testBasePath, "configs/test", "data/users.csv")
+      expect(DataReaderFactory.getReader).toHaveBeenCalledWith(
+        path.resolve(testBasePath, "configs/test", "data/users.csv"),
+        undefined
       );
       expect(mockFs.readFileSync).toHaveBeenCalledWith(
         path.resolve(testBasePath, "configs/test", "graphql/users.graphql"),
@@ -138,14 +148,22 @@ describe("DataMapper", () => {
       );
 
       expect(mockClient.executeMutation).toHaveBeenCalledTimes(2);
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "John",
-        email: "john@example.com",
-      }, undefined);
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "Jane",
-        email: "jane@example.com",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "John",
+          email: "john@example.com",
+        },
+        undefined
+      );
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "Jane",
+          email: "jane@example.com",
+        },
+        undefined
+      );
 
       consoleSpy.mockRestore();
     });
@@ -165,8 +183,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockRejectedValue(new Error("GraphQL error"));
 
@@ -210,8 +228,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createProduct: { id: "456" },
@@ -219,11 +237,15 @@ describe("DataMapper", () => {
 
       await dataMapper.processEntity("configs/test/mappings/products.json");
 
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "Widget",
-        price: "19.99",
-        sku: "W001",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "Widget",
+          price: "19.99",
+          sku: "W001",
+        },
+        undefined
+      );
     });
 
     it("should handle missing CSV columns gracefully", async () => {
@@ -248,8 +270,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createUser: { id: "789" },
@@ -257,10 +279,14 @@ describe("DataMapper", () => {
 
       await dataMapper.processEntity("configs/test/mappings/users.json");
 
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "John",
-        email: "john@example.com",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "John",
+          email: "john@example.com",
+        },
+        undefined
+      );
     });
 
     it("should call metrics methods during successful processing", async () => {
@@ -278,8 +304,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createUser: { id: "123" },
@@ -309,8 +335,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockRejectedValue(new Error("GraphQL error"));
 
@@ -365,8 +391,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createProduct: { id: "123" },
@@ -374,12 +400,16 @@ describe("DataMapper", () => {
 
       await dataMapper.processEntity("configs/test/mappings/products.json");
 
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "Widget",
-        price: 19.99,
-        quantity: 10,
-        active: true,
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "Widget",
+          price: 19.99,
+          quantity: 10,
+          active: true,
+        },
+        undefined
+      );
     });
 
     it("should handle invalid numeric conversions gracefully", async () => {
@@ -413,8 +443,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createProduct: { id: "123" },
@@ -424,11 +454,15 @@ describe("DataMapper", () => {
 
       await dataMapper.processEntity("configs/test/mappings/products.json");
 
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "Widget",
-        price: "invalid_price",
-        quantity: "invalid_quantity",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "Widget",
+          price: "invalid_price",
+          quantity: "invalid_quantity",
+        },
+        undefined
+      );
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Warning: Cannot convert "invalid_price" to Float for variable $price. Expected a valid number. Using original value.'
@@ -473,8 +507,8 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createProduct: { id: "123" },
@@ -485,15 +519,23 @@ describe("DataMapper", () => {
       await dataMapper.processEntity("configs/test/mappings/products.json");
 
       // Should keep invalid values as strings
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        int_field: "1.5",
-        float_field: "Infinity",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          int_field: "1.5",
+          float_field: "Infinity",
+        },
+        undefined
+      );
 
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        int_field: "not_a_number",
-        float_field: "1.2.3",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          int_field: "not_a_number",
+          float_field: "1.2.3",
+        },
+        undefined
+      );
 
       consoleSpy.mockRestore();
     });
@@ -527,24 +569,33 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { readCsvFile } = require("./csv-reader");
-      readCsvFile.mockResolvedValue(mockCsvData);
+      const { DataReaderFactory } = require("./readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       mockClient.executeMutation.mockResolvedValue({
         createProduct: { id: "123" },
       });
 
       // Create verbose mapper to test the logging
-      const verboseMapper = new DataMapper(mockClient, testBasePath, mockMetrics, true);
+      const verboseMapper = new DataMapper(
+        mockClient,
+        testBasePath,
+        mockMetrics,
+        true
+      );
       const consoleSpy = jest.spyOn(console, "log").mockImplementation();
 
       await verboseMapper.processEntity("configs/test/mappings/products.json");
 
       // Should keep custom scalar as string
-      expect(mockClient.executeMutation).toHaveBeenCalledWith(mockMutation, {
-        name: "Widget",
-        custom_field: "123",
-      }, undefined);
+      expect(mockClient.executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "Widget",
+          custom_field: "123",
+        },
+        undefined
+      );
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Unknown GraphQL type "CustomScalar" for variable $custom_field. Keeping value as string.'

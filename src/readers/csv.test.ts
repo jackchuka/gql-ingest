@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { readCsvFile } from "./csv-reader";
+import { readCsvFile } from "./csv";
 
 describe("CSV Reader", () => {
   const testDataDir = path.join(__dirname, "test-data");

@@ -3,12 +3,14 @@
 [![npm version](https://badge.fury.io/js/%40jackchuka%2Fgql-ingest.svg)](https://badge.fury.io/js/%40jackchuka%2Fgql-ingest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A TypeScript CLI tool that reads CSV files and ingests data into GraphQL APIs through configurable mutations.
+A TypeScript CLI tool that reads data from multiple formats (CSV, JSON, YAML, JSONL) and ingests it into GraphQL APIs through configurable mutations.
 
 ## Features
 
+- ✅ **Supported data formats**: CSV, JSON, YAML, JSONL
+- ✅ **Complex nested data support** for sophisticated GraphQL mutations
 - ✅ External GraphQL mutation definitions (separate .graphql files)
-- ✅ CSV-to-GraphQL variable mapping via JSON configuration
+- ✅ Flexible data-to-GraphQL variable mapping via JSON configuration
 - ✅ Configurable GraphQL endpoint and headers
 - ✅ **Parallel processing** with dependency management
 - ✅ Entity-level and row-level concurrency control
@@ -49,6 +51,8 @@ Options:
   -c, --config <path>      Path to configuration directory (required)
   -n, --entities <list>    Comma-separated list of specific entities to process
   -h, --headers <headers>  JSON string of headers to include in requests
+  -f, --format <format>    Override data format detection (csv, json, yaml, jsonl)
+  -v, --verbose            Show detailed request results and responses
   --help                   display help for command
 ```
 
@@ -169,10 +173,8 @@ The `--entities` flag allows you to process specific entities instead of all dis
 
 ## Configuration
 
-The `--config` flag points to a configuration directory containing three subdirectories:
+The `--config` flag points to a configuration directory containing these necessary files:
 
-- `data/` - CSV files with actual data
-- `graphql/` - GraphQL mutation definitions
 - `mappings/` - JSON files that map CSV columns to GraphQL variables
 - `config.yaml` - _(Optional)_ Parallel processing and dependency configuration
 
@@ -184,7 +186,8 @@ Each entity has three corresponding files across these directories with matching
 
 ```json
 {
-  "csvFile": "data/items.csv",
+  "dataFile": "data/items.csv",
+  "dataFormat": "csv",
   "graphqlFile": "graphql/items.graphql",
   "mapping": {
     "name": "item_name",
@@ -239,6 +242,135 @@ entityConfig:
       maxAttempts: 5 # More retries for user creation
   items:
     concurrency: 10 # Higher concurrency for items
+```
+
+## Supported Data Formats 📄
+
+GQL Ingest now supports multiple data formats beyond CSV for more flexible data ingestion, especially for complex nested GraphQL mutations:
+
+### Supported Formats
+
+- **CSV** - Traditional flat file format
+- **JSON** - Perfect for nested/complex data structures
+- **YAML** - Human-friendly alternative to JSON
+- **JSONL** - JSON Lines format for streaming large datasets
+
+### Format Selection
+
+The tool automatically detects the format based on file extension, or you can specify it explicitly:
+
+```bash
+# Auto-detect from mapping configuration
+gql-ingest --endpoint <url> --config ./config
+
+# Force specific format
+gql-ingest --endpoint <url> --config ./config --format json
+```
+
+### JSON/YAML Format Examples
+
+#### Direct Mapping (Entire Object)
+
+For complex GraphQL mutations with nested input types, you can map the entire data object:
+
+**data/products.json**:
+
+```json
+[
+  {
+    "name": "Premium T-Shirt",
+    "type": "PHYSICAL",
+    "options": [
+      {
+        "name": "Color",
+        "values": ["Red", "Blue", "Green"]
+      },
+      {
+        "name": "Size",
+        "values": ["S", "M", "L", "XL"]
+      }
+    ],
+    "variants": [
+      {
+        "name": "Red Small",
+        "sku": "TS-RED-S",
+        "optionMappings": [
+          { "name": "Color", "value": "Red" },
+          { "name": "Size", "value": "S" }
+        ]
+      }
+    ]
+  }
+]
+```
+
+**mappings/products.json**:
+
+```json
+{
+  "dataFile": "data/products.json",
+  "dataFormat": "json",
+  "graphqlFile": "graphql/newProduct.graphql",
+  "mapping": {
+    "input": "$" // Map entire object to input variable
+  }
+}
+```
+
+#### Path-Based Mapping
+
+For transforming flat JSON into nested structures:
+
+**data/products-flat.json**:
+
+```json
+[
+  {
+    "product_name": "Notebook",
+    "product_type": "PHYSICAL",
+    "brand": "ACME"
+  }
+]
+```
+
+**mappings/products-flat.json**:
+
+```json
+{
+  "dataFile": "data/products-flat.json",
+  "graphqlFile": "graphql/newProduct.graphql",
+  "mapping": {
+    "input": {
+      "name": "$.product_name",
+      "type": "$.product_type",
+      "brandCode": "$.brand"
+    }
+  }
+}
+```
+
+### YAML Format
+
+YAML provides a more readable alternative:
+
+**data/products.yaml**:
+
+```yaml
+- name: Premium T-Shirt
+  type: PHYSICAL
+  options:
+    - name: Color
+      values: [Red, Blue, Green]
+    - name: Size
+      values: [S, M, L, XL]
+  variants:
+    - name: Red Small
+      sku: TS-RED-S
+      optionMappings:
+        - name: Color
+          value: Red
+        - name: Size
+          value: S
 ```
 
 ## Development
