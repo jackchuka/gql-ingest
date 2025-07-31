@@ -88,11 +88,25 @@ describe("DependencyResolver", () => {
         a: ["missing"],
         b: ["a"],
       };
-      const resolver = new DependencyResolver(entities, dependencies);
+      const resolver = new DependencyResolver(entities, dependencies, false);
 
       expect(() => resolver.resolveExecutionOrder()).toThrow(
         "Circular dependency detected or missing dependencies for entities: a, b"
       );
+    });
+
+    it("should allow entities with dependencies not in the entity list when partial resolution is enabled", () => {
+      const entities = ["a", "b"];
+      const dependencies = {
+        a: ["missing"],
+        b: ["a"],
+      };
+      const resolver = new DependencyResolver(entities, dependencies, true);
+
+      const waves = resolver.resolveExecutionOrder();
+      expect(waves).toHaveLength(2);
+      expect(waves[0].entities).toEqual(["a"]);
+      expect(waves[1].entities).toEqual(["b"]);
     });
   });
 

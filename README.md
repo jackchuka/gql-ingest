@@ -47,6 +47,7 @@ Options:
   -V, --version            output the version number
   -e, --endpoint <url>     GraphQL endpoint URL (required)
   -c, --config <path>      Path to configuration directory (required)
+  -n, --entities <list>    Comma-separated list of specific entities to process
   -h, --headers <headers>  JSON string of headers to include in requests
   --help                   display help for command
 ```
@@ -70,6 +71,18 @@ npx @jackchuka/gql-ingest \
   --endpoint https://api.example.com/graphql \
   --config ./my-config \
   --headers '{"X-API-Key": "your-api-key", "Content-Type": "application/json"}'
+
+# Process specific entities only
+npx @jackchuka/gql-ingest \
+  --endpoint https://your-graphql-api.com/graphql \
+  --config ./examples/demo \
+  --entities users,products
+
+# Process a single entity
+npx @jackchuka/gql-ingest \
+  --endpoint https://your-graphql-api.com/graphql \
+  --config ./examples/demo \
+  --entities items
 ```
 
 ## Parallel Processing 🚀
@@ -142,6 +155,17 @@ entityConfig:
 ```
 
 **Reliability Impact**: Retry capabilities can improve success rates from 95% to 99.9%+ for APIs with transient failures.
+
+## Selective Entity Processing
+
+The `--entities` flag allows you to process specific entities instead of all discovered mappings:
+
+- Process multiple entities: `--entities users,products,orders`
+- Process a single entity: `--entities items`
+- Entities are processed in dependency order automatically
+- Missing dependencies will trigger a warning but not prevent execution
+
+**Note**: When using `--entities` with entity dependencies defined in `config.yaml`, the tool will warn you about any missing dependencies but will still attempt to process the selected entities. Ensure dependent data exists in your GraphQL API before processing entities with unmet dependencies.
 
 ## Configuration
 
