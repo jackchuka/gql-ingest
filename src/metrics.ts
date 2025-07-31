@@ -119,32 +119,40 @@ export class MetricsCollector {
     const duration = this.getDurationMs();
     const successRate = this.getSuccessRate();
     const avgRequestDuration = this.getAverageRequestDuration();
-    
+
     let summary = `\n📊 Processing Summary:\n`;
     summary += `   Total Processed: ${this.metrics.totalEntities}\n`;
     summary += `   ✓ Successes: ${this.metrics.totalSuccesses}\n`;
     summary += `   ✗ Failures: ${this.metrics.totalFailures}\n`;
     summary += `   Success Rate: ${successRate.toFixed(1)}%\n`;
     summary += `   Duration: ${(duration / 1000).toFixed(2)}s\n`;
-    
+
     if (this.metrics.requestDurations.length > 0) {
       summary += `   Avg Request Time: ${avgRequestDuration.toFixed(0)}ms\n`;
     }
-    
+
     if (this.metrics.retryAttempts > 0) {
       summary += `   Retry Attempts: ${this.metrics.retryAttempts}\n`;
       summary += `   Retry Successes: ${this.metrics.retrySuccesses}\n`;
       summary += `   Retry Failures: ${this.metrics.retryFailures}\n`;
     }
 
-    if (this.metrics.entityMetrics.size > 1) {
+    if (this.metrics.entityMetrics.size > 0) {
       summary += `\n📋 Per-Entity Breakdown:\n`;
       for (const [entityName, entityMetric] of this.metrics.entityMetrics) {
-        const entityTotal = entityMetric.successCount + entityMetric.failureCount;
-        const entityRate = entityTotal > 0 ? (entityMetric.successCount / entityTotal) * 100 : 0;
-        const entityDuration = entityMetric.endTime ? entityMetric.endTime - entityMetric.startTime : 0;
-        
-        summary += `   ${entityName}: ${entityTotal} total (${entityMetric.successCount} ✓, ${entityMetric.failureCount} ✗) - ${entityRate.toFixed(1)}% success - ${(entityDuration / 1000).toFixed(2)}s\n`;
+        const entityTotal =
+          entityMetric.successCount + entityMetric.failureCount;
+        const entityRate =
+          entityTotal > 0 ? (entityMetric.successCount / entityTotal) * 100 : 0;
+        const entityDuration = entityMetric.endTime
+          ? entityMetric.endTime - entityMetric.startTime
+          : 0;
+
+        summary += `   ${entityName}: ${entityTotal} total (${
+          entityMetric.successCount
+        } ✓, ${entityMetric.failureCount} ✗) - ${entityRate.toFixed(
+          1
+        )}% success - ${(entityDuration / 1000).toFixed(2)}s\n`;
       }
     }
 

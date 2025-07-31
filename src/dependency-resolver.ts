@@ -10,10 +10,12 @@ export interface ExecutionWave {
 export class DependencyResolver {
   private dependencies: DependencyGraph;
   private entities: string[];
+  private allowPartialResolution: boolean;
 
-  constructor(entities: string[], dependencies: DependencyGraph = {}) {
+  constructor(entities: string[], dependencies: DependencyGraph = {}, allowPartialResolution: boolean = false) {
     this.entities = entities;
     this.dependencies = dependencies;
+    this.allowPartialResolution = allowPartialResolution;
   }
 
   resolveExecutionOrder(): ExecutionWave[] {
@@ -31,7 +33,9 @@ export class DependencyResolver {
         }
 
         const deps = this.dependencies[entity] || [];
-        const canProcess = deps.every((dep) => processed.has(dep));
+        const canProcess = deps.every((dep) => 
+          processed.has(dep) || (this.allowPartialResolution && !this.entities.includes(dep))
+        );
 
         if (canProcess) {
           currentWave.push(entity);

@@ -30,12 +30,39 @@ export class DataMapper {
     this.verbose = verbose;
   }
 
-  discoverMappings(configDir: string): string[] {
+  discoverMappings(configDir: string, entityFilter?: string[]): string[] {
     const mappingsPath = path.resolve(this.basePath, configDir, "mappings");
 
     try {
       const files = fs.readdirSync(mappingsPath);
-      const jsonFiles = files.filter((file) => file.endsWith(".json")).sort(); // Alphabetical order for consistent processing
+      let jsonFiles = files.filter((file) => file.endsWith(".json"));
+
+      // Apply entity filter if provided
+      if (entityFilter && entityFilter.length > 0) {
+        const requestedEntities = new Set(entityFilter);
+        const foundEntities = new Set<string>();
+
+        jsonFiles = jsonFiles.filter((file) => {
+          const entityName = path.basename(file, ".json");
+          if (requestedEntities.has(entityName)) {
+            foundEntities.add(entityName);
+            return true;
+          }
+          return false;
+        });
+
+        // Check for requested entities that were not found
+        const notFound = entityFilter.filter((e) => !foundEntities.has(e));
+        if (notFound.length > 0) {
+          console.warn(
+            `Warning: The following entities were not found in mappings: ${notFound.join(
+              ", "
+            )}`
+          );
+        }
+      }
+
+      jsonFiles.sort(); // Alphabetical order for consistent processing
 
       console.log(
         `Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`
@@ -161,7 +188,11 @@ export class DataMapper {
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
       const promises = chunk.map(async (row) => {
-        const variables = this.mapCsvRowToVariables(row, mapping, variableTypes);
+        const variables = this.mapCsvRowToVariables(
+          row,
+          mapping,
+          variableTypes
+        );
 
         try {
           const result = await this.client.executeMutation(
@@ -285,7 +316,11 @@ export class DataMapper {
     return null;
   }
 
-  private convertValue(value: string, type: string | undefined, varName: string): any {
+  private convertValue(
+    value: string,
+    type: string | undefined,
+    varName: string
+  ): any {
     if (!type) {
       // No type information available, keep as string
       return value;
@@ -297,7 +332,11 @@ export class DataMapper {
       case "Int":
         const intValue = Number(trimmedValue);
         // Validate that it's a valid integer (no decimals, NaN, or Infinity)
-        if (isNaN(intValue) || !isFinite(intValue) || !Number.isInteger(intValue)) {
+        if (
+          isNaN(intValue) ||
+          !isFinite(intValue) ||
+          !Number.isInteger(intValue)
+        ) {
           console.warn(
             `Warning: Cannot convert "${value}" to Int for variable $${varName}. Expected a valid integer. Using original value.`
           );

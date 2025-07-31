@@ -32,6 +32,10 @@ program
     "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)"
   )
   .option(
+    "-n, --entities <entities>",
+    "Comma-separated list of specific entities to process (e.g., users,products)"
+  )
+  .option(
     "-h, --headers <headers>",
     "JSON string of headers to include in requests"
   )
@@ -65,29 +69,61 @@ program
         options.verbose
       );
 
+      // Parse entities filter if provided
+      const entityFilter = options.entities
+        ? options.entities.split(",").map((e: string) => e.trim())
+        : undefined;
+
       // Discover all mapping files dynamically
-      const mappingPaths = mapper.discoverMappings(options.config);
+      const mappingPaths = mapper.discoverMappings(
+        options.config,
+        entityFilter
+      );
 
       if (mappingPaths.length === 0) {
-        console.warn(`No mapping files found in ${options.config}/mappings`);
+        const filterMsg = entityFilter
+          ? ` matching entities: ${entityFilter.join(", ")}`
+          : "";
+        console.warn(
+          `No mapping files found in ${options.config}/mappings${filterMsg}`
+        );
         return;
       }
 
       // Extract entity names from mapping paths
       const entityNames = mappingPaths.map((path) => basename(path, ".json"));
 
-      // Setup dependency resolver
+      // Filter dependencies to only include those relevant to selected entities
+      const relevantDependencies: Record<string, string[]> = {};
+      if (config.entityDependencies) {
+        for (const entity of entityNames) {
+          if (config.entityDependencies[entity]) {
+            relevantDependencies[entity] = config.entityDependencies[entity];
+          }
+        }
+      }
+
+      // Setup dependency resolver with filtered dependencies
       const resolver = new DependencyResolver(
         entityNames,
-        config.entityDependencies
+        relevantDependencies,
+        !!entityFilter // Allow partial resolution when using --entities
       );
 
       // Validate dependencies
       const validationErrors = resolver.validateDependencies();
       if (validationErrors.length > 0) {
-        console.error("Dependency validation errors:");
-        validationErrors.forEach((error) => console.error(`  - ${error}`));
-        process.exit(1);
+        if (entityFilter) {
+          // When using --entities flag, show warnings instead of errors
+          console.warn("\n⚠️  Warning: Dependency validation issues:");
+          validationErrors.forEach((error) => console.warn(`  - ${error}`));
+          console.warn("This may cause errors if the dependent data doesn't already exist.\n");
+        } else {
+          // Strict validation when processing all entities
+          console.error("Dependency validation errors:");
+          validationErrors.forEach((error) => console.error(`  - ${error}`));
+          process.exit(1);
+        }
       }
 
       // Process entities in dependency-aware waves
