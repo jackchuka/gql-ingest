@@ -122,7 +122,9 @@ program
           // When using --entities flag, show warnings instead of errors
           console.warn("\n⚠️  Warning: Dependency validation issues:");
           validationErrors.forEach((error) => console.warn(`  - ${error}`));
-          console.warn("This may cause errors if the dependent data doesn't already exist.\n");
+          console.warn(
+            "This may cause errors if the dependent data doesn't already exist.\n"
+          );
         } else {
           // Strict validation when processing all entities
           console.error("Dependency validation errors:");
@@ -131,12 +133,7 @@ program
         }
       }
 
-      // Process entities in dependency-aware waves
-      if (config.parallelProcessing.entityConcurrency === 1) {
-        await processEntitiesSequentially(mappingPaths, mapper, config);
-      } else {
-        await processEntitiesInWaves(mappingPaths, resolver, mapper, config);
-      }
+      await processEntitiesInWaves(mappingPaths, resolver, mapper, config);
 
       metrics.finishProcessing();
       console.log(metrics.generateSummary());
@@ -145,23 +142,6 @@ program
       process.exit(1);
     }
   });
-
-async function processEntitiesSequentially(
-  mappingPaths: string[],
-  mapper: DataMapper,
-  config: ReturnType<typeof loadConfig>
-): Promise<void> {
-  for (const configPath of mappingPaths) {
-    try {
-      const entityName = basename(configPath, ".json");
-      const entityConfig = getEntityConfig(entityName, config);
-      const retryConfig = getRetryConfig(entityName, config);
-      await mapper.processEntity(configPath, entityConfig, retryConfig);
-    } catch (error) {
-      console.warn(`Warning: Could not process ${configPath}:`, error);
-    }
-  }
-}
 
 async function processEntitiesInWaves(
   mappingPaths: string[],
