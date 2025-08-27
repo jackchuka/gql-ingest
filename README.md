@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/%40jackchuka%2Fgql-ingest.svg)](https://badge.fury.io/js/%40jackchuka%2Fgql-ingest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A TypeScript CLI tool that reads data from multiple formats (CSV, JSON, YAML, JSONL) and ingests it into GraphQL APIs through configurable mutations.
+A TypeScript library and CLI tool that reads data from multiple formats (CSV, JSON, YAML, JSONL) and ingests it into GraphQL APIs through configurable mutations.
 
 ## Features
 
@@ -39,6 +39,106 @@ npm run build
 ```
 
 ## Usage
+
+### Programmatic API
+
+GQL Ingest provides a full programmatic API for integration into your Node.js applications.
+
+#### Installation for API Usage
+
+```bash
+npm install @jackchuka/gql-ingest
+```
+
+#### Basic API Usage
+
+```typescript
+import { GQLIngest } from "@jackchuka/gql-ingest";
+
+// Initialize the client
+const client = new GQLIngest({
+  endpoint: "https://your-graphql-api.com/graphql",
+  headers: {
+    Authorization: "Bearer YOUR_TOKEN",
+  },
+  verbose: true, // Optional: enable verbose logging
+});
+
+// Ingest all data from a configuration
+const result = await client.ingest("./config");
+
+// Check if ingestion was successful
+if (result.success) {
+  console.log("Ingestion completed successfully");
+  console.log("Metrics:", result.metrics);
+} else {
+  console.error("Ingestion failed:", result.errors);
+}
+```
+
+#### Processing Specific Entities
+
+```typescript
+// Process only specific entities
+const result = await client.ingestEntities("./config", ["users", "products"]);
+
+// Or using the ingest method with options
+const result = await client.ingest("./config", {
+  entities: ["users", "products"],
+  verbose: true,
+});
+```
+
+#### Advanced API Usage
+
+For more control, you can access the underlying components directly:
+
+```typescript
+import {
+  GraphQLClientWrapper,
+  DataMapper,
+  DependencyResolver,
+  MetricsCollector,
+  loadConfig,
+} from "@jackchuka/gql-ingest";
+
+// Create your own custom workflow
+const metrics = new MetricsCollector();
+const client = new GraphQLClientWrapper(endpoint, headers, metrics, verbose);
+const mapper = new DataMapper(client, basePath, metrics, verbose);
+
+// Load configuration
+const config = loadConfig("./config");
+
+// Process entities with custom logic
+// ... your custom implementation
+```
+
+#### API Methods
+
+**GQLIngest Class Methods:**
+
+- `constructor(options: GQLIngestOptions)` - Initialize the client
+- `ingest(configPath: string, options?: IngestOptions)` - Ingest data from a configuration
+- `ingestEntities(configPath: string, entities: string[])` - Process specific entities
+- `getMetrics()` - Get current processing metrics
+- `getMetricsSummary()` - Get formatted metrics summary
+- `setVerbose(verbose: boolean)` - Update verbose mode
+- `setHeaders(headers: Record<string, string>)` - Update request headers
+
+#### TypeScript Support
+
+Full TypeScript support is included with comprehensive type definitions:
+
+```typescript
+import type {
+  GQLIngestOptions,
+  IngestOptions,
+  IngestResult,
+  ProcessingMetrics,
+  EntityMetrics,
+} from "@jackchuka/gql-ingest";
+```
 
 ### CLI Options
 

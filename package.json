@@ -3,7 +3,8 @@
   "version": "2.0.1",
   "description": "A CLI tool for ingesting data from CSV files into a GraphQL API",
   "type": "module",
-  "main": "dist/cli.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "gql-ingest": "bin/cli.js"
   },
@@ -47,6 +48,17 @@
   },
   "files": [
     "dist/**/*",
-    "src/**/*"
-  ]
+    "src/**/*",
+    "bin/**/*"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts"
+    }
+  }
 }
