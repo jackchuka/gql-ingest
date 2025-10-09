@@ -1,6 +1,6 @@
 {
   "name": "@jackchuka/gql-ingest",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "A CLI tool for ingesting data from CSV files into a GraphQL API",
   "type": "module",
   "main": "dist/cli.js",
