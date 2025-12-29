@@ -1,7 +1,7 @@
 {
   "name": "@jackchuka/gql-ingest",
-  "version": "2.2.1",
-  "description": "A CLI tool for ingesting data from CSV files into a GraphQL API",
+  "version": "2.2.2",
+  "description": "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   "keywords": [
     "api",
     "cli",

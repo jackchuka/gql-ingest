@@ -20,7 +20,9 @@ const program = new Command();
 
 program
   .name("gql-ingest")
-  .description("A CLI tool for ingesting data from CSV files into a GraphQL API")
+  .description(
+    "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
+  )
   .version(require("../package.json").version);
 
 program
