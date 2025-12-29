@@ -2,6 +2,8 @@
 node_modules
 build
 npm-debug.log
+pnpm-debug.log
+package-lock.json
 .env
 .DS_Store
 dist
