@@ -2,12 +2,31 @@
   "name": "@jackchuka/gql-ingest",
   "version": "2.1.0",
   "description": "A CLI tool for ingesting data from CSV files into a GraphQL API",
-  "type": "module",
-  "main": "dist/cli.js",
+  "keywords": [
+    "api",
+    "cli",
+    "csv",
+    "graphql",
+    "ingest"
+  ],
+  "license": "MIT",
+  "author": "jackchuka",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jackchuka/gql-ingest.git"
+  },
   "bin": {
     "gql-ingest": "bin/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "dist/cli.js",
   "scripts": {
+    "lint": "oxlint --type-aware --tsconfig ./tsconfig.json",
+    "lint:fix": "oxlint --fix --type-aware --tsconfig ./tsconfig.json",
+    "fmt": "oxfmt",
     "build": "node esbuild.config.js",
     "build:types": "tsc --emitDeclarationOnly",
     "build:all": "npm run build && npm run build:types",
@@ -15,19 +34,6 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "prepublishOnly": "npm run build:all"
-  },
-  "keywords": [
-    "graphql",
-    "cli",
-    "csv",
-    "ingest",
-    "api"
-  ],
-  "author": "jackchuka",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jackchuka/gql-ingest.git"
   },
   "dependencies": {
     "commander": "^14.0.0",
@@ -41,12 +47,11 @@
     "@types/node": "^25.0.2",
     "esbuild": "^0.27.0",
     "jest": "^30.0.3",
+    "oxfmt": "^0.20.0",
+    "oxlint": "^1.35.0",
+    "oxlint-tsgolint": "^0.10.0",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.3.0"
-  },
-  "files": [
-    "dist/**/*",
-    "src/**/*"
-  ]
+  }
 }

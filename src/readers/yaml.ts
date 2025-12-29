@@ -21,8 +21,6 @@ export class YamlReader extends DataReader {
       return [data];
     }
 
-    throw new Error(
-      `Invalid YAML data structure in file: ${filePath}. Expected array or object.`
-    );
+    throw new Error(`Invalid YAML data structure in file: ${filePath}. Expected array or object.`);
   }
 }

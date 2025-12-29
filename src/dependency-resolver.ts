@@ -12,7 +12,11 @@ export class DependencyResolver {
   private entities: string[];
   private allowPartialResolution: boolean;
 
-  constructor(entities: string[], dependencies: DependencyGraph = {}, allowPartialResolution: boolean = false) {
+  constructor(
+    entities: string[],
+    dependencies: DependencyGraph = {},
+    allowPartialResolution: boolean = false,
+  ) {
     this.entities = entities;
     this.dependencies = dependencies;
     this.allowPartialResolution = allowPartialResolution;
@@ -33,8 +37,9 @@ export class DependencyResolver {
         }
 
         const deps = this.dependencies[entity] || [];
-        const canProcess = deps.every((dep) => 
-          processed.has(dep) || (this.allowPartialResolution && !this.entities.includes(dep))
+        const canProcess = deps.every(
+          (dep) =>
+            processed.has(dep) || (this.allowPartialResolution && !this.entities.includes(dep)),
         );
 
         if (canProcess) {
@@ -47,8 +52,8 @@ export class DependencyResolver {
         const remaining = this.entities.filter((e) => !processed.has(e));
         throw new Error(
           `Circular dependency detected or missing dependencies for entities: ${remaining.join(
-            ", "
-          )}`
+            ", ",
+          )}`,
         );
       }
 
@@ -72,17 +77,13 @@ export class DependencyResolver {
 
     for (const [entity, deps] of Object.entries(this.dependencies)) {
       if (!entitySet.has(entity)) {
-        errors.push(
-          `Entity '${entity}' has dependencies but is not in the entity list`
-        );
+        errors.push(`Entity '${entity}' has dependencies but is not in the entity list`);
         continue;
       }
 
       for (const dep of deps) {
         if (!entitySet.has(dep)) {
-          errors.push(
-            `Entity '${entity}' depends on '${dep}' which does not exist`
-          );
+          errors.push(`Entity '${entity}' depends on '${dep}' which does not exist`);
         }
       }
     }

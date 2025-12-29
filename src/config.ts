@@ -68,9 +68,8 @@ export function loadConfig(configDir: string): ProcessingConfig {
 
     return mergeWithDefaults(yamlConfig);
   } catch (error) {
-    console.warn(
-      `Warning: Failed to parse config.yaml: ${error}. Using defaults.`
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.warn(`Warning: Failed to parse config.yaml: ${errorMessage}. Using defaults.`);
     return DEFAULT_CONFIG;
   }
 }
@@ -79,11 +78,11 @@ function mergeWithDefaults(yamlConfig: Partial<FullConfig>): ProcessingConfig {
   return {
     retry: {
       ...DEFAULT_RETRY_CONFIG,
-      ...(yamlConfig.retry || {}),
+      ...yamlConfig.retry,
     },
     parallelProcessing: {
       ...DEFAULT_PARALLEL_CONFIG,
-      ...(yamlConfig.parallelProcessing || {}),
+      ...yamlConfig.parallelProcessing,
     },
     entityConfig: yamlConfig.entityConfig || {},
     entityDependencies: yamlConfig.entityDependencies || {},
@@ -92,7 +91,7 @@ function mergeWithDefaults(yamlConfig: Partial<FullConfig>): ProcessingConfig {
 
 export function getEntityConfig(
   entityName: string,
-  globalConfig: ProcessingConfig
+  globalConfig: ProcessingConfig,
 ): ParallelProcessingConfig {
   const entityOverrides = globalConfig.entityConfig[entityName] || {};
 
@@ -104,7 +103,7 @@ export function getEntityConfig(
   // Apply constraint: preserveRowOrder forces concurrency = 1
   if (finalConfig.preserveRowOrder && finalConfig.concurrency > 1) {
     console.warn(
-      `Entity '${entityName}': preserveRowOrder=true forces concurrency=1 (was ${finalConfig.concurrency})`
+      `Entity '${entityName}': preserveRowOrder=true forces concurrency=1 (was ${finalConfig.concurrency})`,
     );
     finalConfig.concurrency = 1;
   }
@@ -112,10 +111,7 @@ export function getEntityConfig(
   return finalConfig;
 }
 
-export function getRetryConfig(
-  entityName: string,
-  globalConfig: ProcessingConfig
-): RetryConfig {
+export function getRetryConfig(entityName: string, globalConfig: ProcessingConfig): RetryConfig {
   const entityOverrides = globalConfig.entityConfig[entityName]?.retry || {};
 
   return {

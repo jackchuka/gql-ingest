@@ -15,9 +15,7 @@ export abstract class DataReader {
    */
   canHandle(filePath: string): boolean {
     const extension = filePath.split(".").pop()?.toLowerCase();
-    return extension
-      ? this.getSupportedExtensions().includes(extension)
-      : false;
+    return extension ? this.getSupportedExtensions().includes(extension) : false;
   }
 }
 
@@ -32,7 +30,7 @@ export class DataReaderFactory {
     // If format is specified, try to find reader by format
     if (format) {
       const reader = this.readers.find((r) =>
-        r.getSupportedExtensions().includes(format.toLowerCase())
+        r.getSupportedExtensions().includes(format.toLowerCase()),
       );
       if (reader) return reader;
     }
@@ -42,9 +40,7 @@ export class DataReaderFactory {
 
     if (!reader) {
       throw new Error(
-        `No reader found for file: ${filePath}${
-          format ? ` with format: ${format}` : ""
-        }`
+        `No reader found for file: ${filePath}${format ? ` with format: ${format}` : ""}`,
       );
     }
 

@@ -69,9 +69,7 @@ describe("YamlReader", () => {
         throw new Error("Invalid YAML");
       });
 
-      await expect(reader.readFile("data.yaml")).rejects.toThrow(
-        "Invalid YAML"
-      );
+      await expect(reader.readFile("data.yaml")).rejects.toThrow("Invalid YAML");
     });
 
     it("should throw error for null data", async () => {
@@ -79,7 +77,7 @@ describe("YamlReader", () => {
       mockYaml.load.mockReturnValue(null);
 
       await expect(reader.readFile("data.yaml")).rejects.toThrow(
-        "Invalid YAML data structure in file: data.yaml. Expected array or object."
+        "Invalid YAML data structure in file: data.yaml. Expected array or object.",
       );
     });
 
@@ -88,7 +86,7 @@ describe("YamlReader", () => {
       mockYaml.load.mockReturnValue("string value");
 
       await expect(reader.readFile("data.yaml")).rejects.toThrow(
-        "Invalid YAML data structure in file: data.yaml. Expected array or object."
+        "Invalid YAML data structure in file: data.yaml. Expected array or object.",
       );
     });
   });
