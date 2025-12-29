@@ -78,7 +78,7 @@ describe("DependencyResolver", () => {
       const resolver = new DependencyResolver(entities, dependencies);
 
       expect(() => resolver.resolveExecutionOrder()).toThrow(
-        "Circular dependency detected or missing dependencies for entities: a, b, c"
+        "Circular dependency detected or missing dependencies for entities: a, b, c",
       );
     });
 
@@ -91,7 +91,7 @@ describe("DependencyResolver", () => {
       const resolver = new DependencyResolver(entities, dependencies, false);
 
       expect(() => resolver.resolveExecutionOrder()).toThrow(
-        "Circular dependency detected or missing dependencies for entities: a, b"
+        "Circular dependency detected or missing dependencies for entities: a, b",
       );
     });
 
@@ -134,9 +134,7 @@ describe("DependencyResolver", () => {
 
       const errors = resolver.validateDependencies();
 
-      expect(errors).toContain(
-        "Entity 'orders' has dependencies but is not in the entity list"
-      );
+      expect(errors).toContain("Entity 'orders' has dependencies but is not in the entity list");
     });
 
     it("should detect dependencies on non-existent entities", () => {
@@ -148,9 +146,7 @@ describe("DependencyResolver", () => {
 
       const errors = resolver.validateDependencies();
 
-      expect(errors).toContain(
-        "Entity 'products' depends on 'categories' which does not exist"
-      );
+      expect(errors).toContain("Entity 'products' depends on 'categories' which does not exist");
     });
 
     it("should detect multiple validation errors", () => {
@@ -164,12 +160,8 @@ describe("DependencyResolver", () => {
       const errors = resolver.validateDependencies();
 
       expect(errors).toHaveLength(2);
-      expect(errors).toContain(
-        "Entity 'products' has dependencies but is not in the entity list"
-      );
-      expect(errors).toContain(
-        "Entity 'orders' has dependencies but is not in the entity list"
-      );
+      expect(errors).toContain("Entity 'products' has dependencies but is not in the entity list");
+      expect(errors).toContain("Entity 'orders' has dependencies but is not in the entity list");
     });
   });
 

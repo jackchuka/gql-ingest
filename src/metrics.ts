@@ -140,10 +140,8 @@ export class MetricsCollector {
     if (this.metrics.entityMetrics.size > 0) {
       summary += `\n📋 Per-Entity Breakdown:\n`;
       for (const [entityName, entityMetric] of this.metrics.entityMetrics) {
-        const entityTotal =
-          entityMetric.successCount + entityMetric.failureCount;
-        const entityRate =
-          entityTotal > 0 ? (entityMetric.successCount / entityTotal) * 100 : 0;
+        const entityTotal = entityMetric.successCount + entityMetric.failureCount;
+        const entityRate = entityTotal > 0 ? (entityMetric.successCount / entityTotal) * 100 : 0;
         const entityDuration = entityMetric.endTime
           ? entityMetric.endTime - entityMetric.startTime
           : 0;
@@ -151,7 +149,7 @@ export class MetricsCollector {
         summary += `   ${entityName}: ${entityTotal} total (${
           entityMetric.successCount
         } ✓, ${entityMetric.failureCount} ✗) - ${entityRate.toFixed(
-          1
+          1,
         )}% success - ${(entityDuration / 1000).toFixed(2)}s\n`;
       }
     }

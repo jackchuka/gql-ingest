@@ -20,30 +20,22 @@ const program = new Command();
 
 program
   .name("gql-ingest")
-  .description(
-    "A CLI tool for ingesting data from CSV files into a GraphQL API"
-  )
+  .description("A CLI tool for ingesting data from CSV files into a GraphQL API")
   .version(require("../package.json").version);
 
 program
   .requiredOption("-e, --endpoint <url>", "GraphQL endpoint URL")
   .requiredOption(
     "-c, --config <path>",
-    "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)"
+    "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)",
   )
   .option(
     "-n, --entities <entities>",
-    "Comma-separated list of specific entities to process (e.g., users,products)"
+    "Comma-separated list of specific entities to process (e.g., users,products)",
   )
-  .option(
-    "-h, --headers <headers>",
-    "JSON string of headers to include in requests"
-  )
+  .option("-h, --headers <headers>", "JSON string of headers to include in requests")
   .option("-v, --verbose", "Show detailed request results and responses")
-  .option(
-    "-f, --format <format>",
-    "Override data format detection (csv, json, yaml, jsonl)"
-  )
+  .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
   .action(async (options) => {
     try {
       console.log("Starting seed data generation...");
@@ -55,12 +47,7 @@ program
       const metrics = new MetricsCollector();
 
       // Initialize GraphQL client
-      const client = new GraphQLClientWrapper(
-        options.endpoint,
-        headers,
-        metrics,
-        options.verbose
-      );
+      const client = new GraphQLClientWrapper(options.endpoint, headers, metrics, options.verbose);
 
       // Load configuration
       const config = loadConfig(options.config);
@@ -71,7 +58,7 @@ program
         process.cwd(),
         metrics,
         options.verbose,
-        options.format
+        options.format,
       );
 
       // Parse entities filter if provided
@@ -80,18 +67,11 @@ program
         : undefined;
 
       // Discover all mapping files dynamically
-      const mappingPaths = mapper.discoverMappings(
-        options.config,
-        entityFilter
-      );
+      const mappingPaths = mapper.discoverMappings(options.config, entityFilter);
 
       if (mappingPaths.length === 0) {
-        const filterMsg = entityFilter
-          ? ` matching entities: ${entityFilter.join(", ")}`
-          : "";
-        console.warn(
-          `No mapping files found in ${options.config}/mappings${filterMsg}`
-        );
+        const filterMsg = entityFilter ? ` matching entities: ${entityFilter.join(", ")}` : "";
+        console.warn(`No mapping files found in ${options.config}/mappings${filterMsg}`);
         return;
       }
 
@@ -112,7 +92,7 @@ program
       const resolver = new DependencyResolver(
         entityNames,
         relevantDependencies,
-        !!entityFilter // Allow partial resolution when using --entities
+        !!entityFilter, // Allow partial resolution when using --entities
       );
 
       // Validate dependencies
@@ -122,9 +102,7 @@ program
           // When using --entities flag, show warnings instead of errors
           console.warn("\n⚠️  Warning: Dependency validation issues:");
           validationErrors.forEach((error) => console.warn(`  - ${error}`));
-          console.warn(
-            "This may cause errors if the dependent data doesn't already exist.\n"
-          );
+          console.warn("This may cause errors if the dependent data doesn't already exist.\n");
         } else {
           // Strict validation when processing all entities
           console.error("Dependency validation errors:");
@@ -147,19 +125,15 @@ async function processEntitiesInWaves(
   mappingPaths: string[],
   resolver: DependencyResolver,
   mapper: DataMapper,
-  config: ReturnType<typeof loadConfig>
+  config: ReturnType<typeof loadConfig>,
 ): Promise<void> {
   const waves = resolver.resolveExecutionOrder();
-  const pathMap = new Map(
-    mappingPaths.map((path) => [basename(path, ".json"), path])
-  );
+  const pathMap = new Map(mappingPaths.map((path) => [basename(path, ".json"), path]));
 
   console.log(`Processing ${waves.length} dependency waves...`);
 
   for (const wave of waves) {
-    console.log(
-      `Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`
-    );
+    console.log(`Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`);
 
     // Process entities in controlled batches based on entityConcurrency
     const entityConcurrency = config.parallelProcessing.entityConcurrency;

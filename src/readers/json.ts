@@ -20,8 +20,6 @@ export class JsonReader extends DataReader {
       return [data];
     }
 
-    throw new Error(
-      `Invalid JSON data structure in file: ${filePath}. Expected array or object.`
-    );
+    throw new Error(`Invalid JSON data structure in file: ${filePath}. Expected array or object.`);
   }
 }

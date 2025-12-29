@@ -65,7 +65,7 @@ describe("JsonReader", () => {
       mockFs.readFile.mockResolvedValue("null");
 
       await expect(reader.readFile("data.json")).rejects.toThrow(
-        "Invalid JSON data structure in file: data.json. Expected array or object."
+        "Invalid JSON data structure in file: data.json. Expected array or object.",
       );
     });
 
@@ -73,7 +73,7 @@ describe("JsonReader", () => {
       mockFs.readFile.mockResolvedValue('"string value"');
 
       await expect(reader.readFile("data.json")).rejects.toThrow(
-        "Invalid JSON data structure in file: data.json. Expected array or object."
+        "Invalid JSON data structure in file: data.json. Expected array or object.",
       );
     });
   });

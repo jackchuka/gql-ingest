@@ -13,7 +13,7 @@ export interface MappingConfig {
   dataFile?: string;
   dataFormat?: string;
   graphqlFile: string;
-  mapping: Record<string, string | any>;
+  mapping: Record<string, unknown>;
 }
 
 export class DataMapper {
@@ -28,7 +28,7 @@ export class DataMapper {
     basePath: string = process.cwd(),
     metrics?: MetricsCollector,
     verbose: boolean = false,
-    formatOverride?: string
+    formatOverride?: string,
   ) {
     this.client = client;
     this.basePath = basePath;
@@ -62,18 +62,14 @@ export class DataMapper {
         const notFound = entityFilter.filter((e) => !foundEntities.has(e));
         if (notFound.length > 0) {
           console.warn(
-            `Warning: The following entities were not found in mappings: ${notFound.join(
-              ", "
-            )}`
+            `Warning: The following entities were not found in mappings: ${notFound.join(", ")}`,
           );
         }
       }
 
       jsonFiles.sort(); // Alphabetical order for consistent processing
 
-      console.log(
-        `Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`
-      );
+      console.log(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
       return jsonFiles.map((file) => path.join(configDir, "mappings", file));
     } catch (error) {
       console.error(`Error reading mappings directory ${mappingsPath}:`, error);
@@ -84,7 +80,7 @@ export class DataMapper {
   async processEntity(
     configPath: string,
     parallelConfig?: ParallelProcessingConfig,
-    retryConfig?: RetryConfig
+    retryConfig?: RetryConfig,
   ): Promise<void> {
     const entityName = path.basename(configPath, ".json");
     console.log(`Processing entity: ${configPath}`);
@@ -93,9 +89,7 @@ export class DataMapper {
 
     // Read mapping configuration
     const configFullPath = path.resolve(this.basePath, configPath);
-    const config: MappingConfig = JSON.parse(
-      fs.readFileSync(configFullPath, "utf8")
-    );
+    const config: MappingConfig = JSON.parse(fs.readFileSync(configFullPath, "utf8"));
 
     // Extract config directory (parent of mappings directory)
     const configDir = path.dirname(path.dirname(configFullPath));
@@ -103,9 +97,7 @@ export class DataMapper {
     // Determine data file path (support both legacy csvFile and new dataFile)
     const dataFile = config.dataFile || config.csvFile;
     if (!dataFile) {
-      throw new Error(
-        `No data file specified in mapping config: ${configPath}`
-      );
+      throw new Error(`No data file specified in mapping config: ${configPath}`);
     }
 
     const dataPath = path.resolve(configDir, dataFile);
@@ -127,16 +119,10 @@ export class DataMapper {
         config.mapping,
         entityName,
         parallelConfig,
-        retryConfig
+        retryConfig,
       );
     } else {
-      await this.processRowsSequentially(
-        data,
-        mutation,
-        config.mapping,
-        entityName,
-        retryConfig
-      );
+      await this.processRowsSequentially(data, mutation, config.mapping, entityName, retryConfig);
     }
 
     this.metrics.finishEntityProcessing(entityName);
@@ -145,9 +131,9 @@ export class DataMapper {
   private async processRowsSequentially(
     data: DataRow[],
     mutation: string,
-    mapping: Record<string, string | any>,
+    mapping: Record<string, unknown>,
     entityName: string,
-    retryConfig?: RetryConfig
+    retryConfig?: RetryConfig,
   ): Promise<void> {
     const totalRows = data.length;
     const variableTypes = this.extractVariableTypes(mutation);
@@ -163,8 +149,7 @@ export class DataMapper {
         // Show progress every 10% or at the end (only in non-verbose mode)
         if (
           !this.verbose &&
-          ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 ||
-            i === totalRows - 1)
+          ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1)
         ) {
           const progress = (((i + 1) / totalRows) * 100).toFixed(1);
           console.log(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
@@ -172,11 +157,7 @@ export class DataMapper {
       } catch (error) {
         this.metrics.recordFailure(entityName);
         if (!this.verbose) {
-          console.error(
-            `✗ Failed to create entity for row ${i + 1}:`,
-            row,
-            error
-          );
+          console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
         }
       }
     }
@@ -185,15 +166,13 @@ export class DataMapper {
   private async processRowsConcurrently(
     data: DataRow[],
     mutation: string,
-    mapping: Record<string, string | any>,
+    mapping: Record<string, unknown>,
     entityName: string,
     parallelConfig: ParallelProcessingConfig,
-    retryConfig?: RetryConfig
+    retryConfig?: RetryConfig,
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
-    console.log(
-      `Processing ${data.length} rows with concurrency: ${concurrency}`
-    );
+    console.log(`Processing ${data.length} rows with concurrency: ${concurrency}`);
 
     // Extract variable types once for all rows
     const variableTypes = this.extractVariableTypes(mutation);
@@ -209,11 +188,7 @@ export class DataMapper {
         const variables = this.mapRowToVariables(row, mapping, variableTypes);
 
         try {
-          const result = await this.client.executeMutation(
-            mutation,
-            variables,
-            retryConfig
-          );
+          const result = await this.client.executeMutation(mutation, variables, retryConfig);
           this.metrics.recordSuccess(entityName);
           return { success: true, result, row };
         } catch (error) {
@@ -254,7 +229,7 @@ export class DataMapper {
         console.log(
           `📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${
             chunkIndex + 1
-          }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`
+          }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`,
         );
       }
     }
@@ -270,8 +245,8 @@ export class DataMapper {
 
   private mapRowToVariables(
     row: DataRow,
-    mapping: Record<string, string | any>,
-    variableTypes: Record<string, string>
+    mapping: Record<string, unknown>,
+    variableTypes: Record<string, string>,
   ): Record<string, any> {
     const variables: Record<string, any> = {};
 
@@ -282,10 +257,7 @@ export class DataMapper {
         variables[graphqlVar] = row;
       }
       // Handle path-based mapping for nested data (e.g., "input.name": "$.product.name")
-      else if (
-        typeof mappingValue === "string" &&
-        mappingValue.startsWith("$.")
-      ) {
+      else if (typeof mappingValue === "string" && mappingValue.startsWith("$.")) {
         const path = mappingValue.substring(2); // Remove '$.'
         const value = this.getValueByPath(row, path);
         if (value !== undefined) {
@@ -294,21 +266,14 @@ export class DataMapper {
         }
       }
       // Handle traditional flat mapping (e.g., "name": "product_name")
-      else if (
-        typeof mappingValue === "string" &&
-        row[mappingValue] !== undefined
-      ) {
+      else if (typeof mappingValue === "string" && row[mappingValue] !== undefined) {
         const rawValue = row[mappingValue];
         const type = variableTypes[graphqlVar];
         variables[graphqlVar] = this.convertValue(rawValue, type, graphqlVar);
       }
       // Handle complex mapping object
       else if (typeof mappingValue === "object" && mappingValue !== null) {
-        variables[graphqlVar] = this.mapNestedObject(
-          row,
-          mappingValue,
-          variableTypes
-        );
+        variables[graphqlVar] = this.mapNestedObject(row, mappingValue, variableTypes);
       }
     }
 
@@ -333,12 +298,10 @@ export class DataMapper {
   private mapNestedObject(
     row: DataRow,
     mappingObj: any,
-    variableTypes: Record<string, string>
+    variableTypes: Record<string, string>,
   ): any {
     if (Array.isArray(mappingObj)) {
-      return mappingObj.map((item) =>
-        this.mapNestedObject(row, item, variableTypes)
-      );
+      return mappingObj.map((item) => this.mapNestedObject(row, item, variableTypes));
     }
 
     if (typeof mappingObj === "object" && mappingObj !== null) {
@@ -349,11 +312,7 @@ export class DataMapper {
           let fieldValue = this.getValueByPath(row, path);
 
           // Handle special case for array fields (e.g., comma-separated values)
-          if (
-            key === "values" &&
-            typeof fieldValue === "string" &&
-            fieldValue.includes(",")
-          ) {
+          if (key === "values" && typeof fieldValue === "string" && fieldValue.includes(",")) {
             fieldValue = fieldValue.split(",").map((v) => v.trim());
           }
 
@@ -380,10 +339,7 @@ export class DataMapper {
 
       // Find the operation (mutation/query) and extract variable definitions
       for (const definition of document.definitions) {
-        if (
-          definition.kind === "OperationDefinition" &&
-          definition.variableDefinitions
-        ) {
+        if (definition.kind === "OperationDefinition" && definition.variableDefinitions) {
           for (const variableDef of definition.variableDefinitions) {
             const varName = variableDef.variable.name.value;
             const typeName = this.extractTypeName(variableDef);
@@ -416,11 +372,7 @@ export class DataMapper {
     return null;
   }
 
-  private convertValue(
-    value: any,
-    type: string | undefined,
-    varName: string
-  ): any {
+  private convertValue(value: any, type: string | undefined, varName: string): any {
     if (!type) {
       // No type information available, keep as is
       return value;
@@ -437,13 +389,9 @@ export class DataMapper {
       case "Int":
         const intValue = Number(trimmedValue);
         // Validate that it's a valid integer (no decimals, NaN, or Infinity)
-        if (
-          isNaN(intValue) ||
-          !isFinite(intValue) ||
-          !Number.isInteger(intValue)
-        ) {
+        if (isNaN(intValue) || !isFinite(intValue) || !Number.isInteger(intValue)) {
           console.warn(
-            `Warning: Cannot convert "${value}" to Int for variable $${varName}. Expected a valid integer. Using original value.`
+            `Warning: Cannot convert "${value}" to Int for variable $${varName}. Expected a valid integer. Using original value.`,
           );
           return value;
         }
@@ -454,7 +402,7 @@ export class DataMapper {
         // Number() is more strict than parseFloat() - it requires the entire string to be valid
         if (isNaN(floatValue) || !isFinite(floatValue)) {
           console.warn(
-            `Warning: Cannot convert "${value}" to Float for variable $${varName}. Expected a valid number. Using original value.`
+            `Warning: Cannot convert "${value}" to Float for variable $${varName}. Expected a valid number. Using original value.`,
           );
           return value;
         }
@@ -465,7 +413,7 @@ export class DataMapper {
         if (lowerValue === "true" || lowerValue === "1") return true;
         if (lowerValue === "false" || lowerValue === "0") return false;
         console.warn(
-          `Warning: Cannot convert "${value}" to Boolean for variable $${varName}. Expected "true", "false", "1", or "0". Using original value.`
+          `Warning: Cannot convert "${value}" to Boolean for variable $${varName}. Expected "true", "false", "1", or "0". Using original value.`,
         );
         return value;
 
@@ -476,7 +424,7 @@ export class DataMapper {
         // Unknown scalar type - keep as string for safety
         if (this.verbose) {
           console.log(
-            `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`
+            `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`,
           );
         }
         return value;

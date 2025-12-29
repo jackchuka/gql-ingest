@@ -11,7 +11,7 @@ export class GraphQLClientWrapper {
     endpoint: string,
     headers?: Record<string, string>,
     metrics?: MetricsCollector,
-    verbose: boolean = false
+    verbose: boolean = false,
   ) {
     this.client = new GraphQLClient(endpoint, {
       headers: headers || {},
@@ -23,7 +23,7 @@ export class GraphQLClientWrapper {
   async executeMutation(
     mutation: string,
     variables: Record<string, any>,
-    retryConfig?: RetryConfig
+    retryConfig?: RetryConfig,
   ): Promise<any> {
     const config = retryConfig || DEFAULT_RETRY_CONFIG;
 
@@ -46,12 +46,8 @@ export class GraphQLClientWrapper {
 
         if (this.verbose) {
           const totalDuration = Date.now() - totalStartTime;
-          const retryInfo =
-            attempt > 0 ? ` (succeeded on attempt ${attempt + 1})` : "";
-          console.log(
-            `✓ GraphQL request completed in ${totalDuration}ms${retryInfo}:`,
-            result
-          );
+          const retryInfo = attempt > 0 ? ` (succeeded on attempt ${attempt + 1})` : "";
+          console.log(`✓ GraphQL request completed in ${totalDuration}ms${retryInfo}:`, result);
         }
 
         return result;
@@ -76,7 +72,7 @@ export class GraphQLClientWrapper {
           if (this.verbose) {
             console.error(
               `✗ GraphQL request failed with non-retryable error in ${duration}ms:`,
-              error
+              error,
             );
           } else {
             console.error("GraphQL mutation failed (non-retryable):", error);
@@ -91,7 +87,7 @@ export class GraphQLClientWrapper {
           console.log(
             `⏳ GraphQL request failed (attempt ${attempt + 1}/${
               config.maxAttempts
-            }), retrying in ${delay}ms...`
+            }), retrying in ${delay}ms...`,
           );
         }
 
@@ -105,13 +101,10 @@ export class GraphQLClientWrapper {
       const totalDuration = Date.now() - totalStartTime;
       console.error(
         `✗ GraphQL request failed after ${config.maxAttempts} attempts in ${totalDuration}ms:`,
-        lastError
+        lastError,
       );
     } else {
-      console.error(
-        `GraphQL mutation failed after ${config.maxAttempts} attempts:`,
-        lastError
-      );
+      console.error(`GraphQL mutation failed after ${config.maxAttempts} attempts:`, lastError);
     }
 
     throw lastError;
