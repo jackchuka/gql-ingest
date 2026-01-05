@@ -17,8 +17,9 @@ export class JsonlReader extends DataReader {
         const data = JSON.parse(lines[i]);
         results.push(data);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `Invalid JSON at line ${i + 1} in file: ${filePath}. Error: ${error}`
+          `Invalid JSON at line ${i + 1} in file: ${filePath}. Error: ${errorMessage}`,
         );
       }
     }

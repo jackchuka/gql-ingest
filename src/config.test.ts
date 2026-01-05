@@ -1,5 +1,4 @@
 import fs from "fs";
-import path from "path";
 import { loadConfig, getEntityConfig, getRetryConfig, DEFAULT_CONFIG } from "./config";
 
 jest.mock("fs");
@@ -7,7 +6,6 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 
 describe("Configuration", () => {
   const testConfigDir = "/test/config";
-  const configPath = path.join(testConfigDir, "config.yaml");
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -22,7 +20,7 @@ describe("Configuration", () => {
 
       expect(config).toEqual(DEFAULT_CONFIG);
       expect(consoleSpy).toHaveBeenCalledWith(
-        "No config.yaml found, using default sequential processing"
+        "No config.yaml found, using default sequential processing",
       );
 
       consoleSpy.mockRestore();
@@ -85,7 +83,7 @@ entityConfig:
 
       expect(config).toEqual(DEFAULT_CONFIG);
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Warning: Failed to parse config.yaml")
+        expect.stringContaining("Warning: Failed to parse config.yaml"),
       );
 
       consoleSpy.mockRestore();
@@ -103,7 +101,7 @@ entityConfig:
 
       expect(config).toEqual(DEFAULT_CONFIG);
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Warning: Failed to parse config.yaml")
+        expect.stringContaining("Warning: Failed to parse config.yaml"),
       );
 
       consoleSpy.mockRestore();
@@ -158,7 +156,7 @@ entityConfig:
       expect(entityConfig.concurrency).toBe(1); // forced to 1
       expect(entityConfig.preserveRowOrder).toBe(true);
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Entity 'users': preserveRowOrder=true forces concurrency=1 (was 2)"
+        "Entity 'users': preserveRowOrder=true forces concurrency=1 (was 2)",
       );
 
       consoleSpy.mockRestore();

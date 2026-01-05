@@ -5,7 +5,7 @@ class TestReader extends DataReader {
     return ["test", "tst"];
   }
 
-  async readFile(filePath: string): Promise<any[]> {
+  async readFile(_: string): Promise<any[]> {
     return [{ test: true }];
   }
 }
@@ -63,13 +63,13 @@ describe("DataReaderFactory", () => {
 
     it("should throw error when no reader found", () => {
       expect(() => DataReaderFactory.getReader("file.unknown")).toThrow(
-        "No reader found for file: file.unknown"
+        "No reader found for file: file.unknown",
       );
     });
 
     it("should throw error when format specified but no reader found", () => {
       expect(() => DataReaderFactory.getReader("file.txt", "unknown")).toThrow(
-        "No reader found for file: file.txt with format: unknown"
+        "No reader found for file: file.txt with format: unknown",
       );
     });
   });

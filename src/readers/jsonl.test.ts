@@ -48,9 +48,7 @@ describe("JsonlReader", () => {
     it("should handle empty lines", async () => {
       const line1 = { id: 1, name: "Item 1" };
       const line2 = { id: 2, name: "Item 2" };
-      const jsonlContent = `${JSON.stringify(line1)}\n\n${JSON.stringify(
-        line2
-      )}\n`;
+      const jsonlContent = `${JSON.stringify(line1)}\n\n${JSON.stringify(line2)}\n`;
       mockFs.readFile.mockResolvedValue(jsonlContent);
 
       const result = await reader.readFile("data.jsonl");
@@ -73,7 +71,7 @@ describe("JsonlReader", () => {
       mockFs.readFile.mockResolvedValue(jsonlContent);
 
       await expect(reader.readFile("data.jsonl")).rejects.toThrow(
-        "Invalid JSON at line 2 in file: data.jsonl"
+        "Invalid JSON at line 2 in file: data.jsonl",
       );
     });
 

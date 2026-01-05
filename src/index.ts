@@ -1,10 +1,6 @@
 // Main programmatic API exports
 export { GQLIngest } from "./gql-ingest";
-export type {
-  GQLIngestOptions,
-  IngestOptions,
-  IngestResult,
-} from "./gql-ingest";
+export type { GQLIngestOptions, IngestOptions, IngestResult } from "./gql-ingest";
 
 // Core components for advanced usage
 export { GraphQLClientWrapper } from "./graphql-client";

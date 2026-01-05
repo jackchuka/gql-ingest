@@ -1,56 +1,29 @@
 {
   "name": "@jackchuka/gql-ingest",
-  "version": "2.0.1",
-  "description": "A CLI tool for ingesting data from CSV files into a GraphQL API",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "gql-ingest": "bin/cli.js"
-  },
-  "scripts": {
-    "build": "node esbuild.config.js",
-    "build:types": "tsc --emitDeclarationOnly",
-    "build:all": "npm run build && npm run build:types",
-    "dev": "ts-node src/cli.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "prepublishOnly": "npm run build:all"
-  },
+  "version": "2.2.2",
+  "description": "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   "keywords": [
-    "graphql",
+    "api",
     "cli",
     "csv",
-    "ingest",
-    "api"
+    "graphql",
+    "ingest"
   ],
-  "author": "jackchuka",
   "license": "MIT",
+  "author": "jackchuka",
   "repository": {
     "type": "git",
     "url": "https://github.com/jackchuka/gql-ingest.git"
   },
-  "dependencies": {
-    "commander": "^14.0.0",
-    "csv-parser": "^3.0.0",
-    "graphql-request": "^7.2.0",
-    "js-yaml": "^4.1.0"
-  },
-  "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^24.0.4",
-    "esbuild": "^0.25.5",
-    "jest": "^30.0.3",
-    "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.0",
-    "typescript": "^5.3.0"
+  "bin": {
+    "gql-ingest": "dist/cli.js"
   },
   "files": [
-    "dist/**/*",
-    "src/**/*",
-    "bin/**/*"
+    "dist"
   ],
+  "type": "module",
+  "main": "dist/cli.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -60,5 +33,38 @@
     "./types": {
       "types": "./dist/types.d.ts"
     }
-  }
+  },
+  "scripts": {
+    "lint": "oxlint --type-aware --tsconfig ./tsconfig.json",
+    "lint:fix": "oxlint --fix --type-aware --tsconfig ./tsconfig.json",
+    "fmt": "oxfmt",
+    "build": "node esbuild.config.js",
+    "build:types": "tsc --emitDeclarationOnly",
+    "build:all": "pnpm run build && pnpm run build:types",
+    "dev": "ts-node src/cli.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "prepublishOnly": "pnpm run build:all"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "csv-parser": "^3.0.0",
+    "graphql": "16.12.0",
+    "graphql-request": "^7.2.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.0.2",
+    "esbuild": "^0.27.0",
+    "jest": "^30.0.3",
+    "oxfmt": "^0.20.0",
+    "oxlint": "^1.35.0",
+    "oxlint-tsgolint": "^0.10.0",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.3.0"
+  },
+  "packageManager": "pnpm@8.14.1"
 }

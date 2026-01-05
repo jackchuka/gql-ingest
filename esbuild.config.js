@@ -5,7 +5,7 @@ const build = async () => {
   await esbuild.build({
     entryPoints: ["src/cli.ts"],
     bundle: true,
-    outfile: "bin/cli.js",
+    outfile: "dist/cli.js",
     platform: "node",
     target: "node18",
     format: "esm",

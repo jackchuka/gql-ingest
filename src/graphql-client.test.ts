@@ -20,10 +20,7 @@ describe("GraphQLClientWrapper", () => {
 
   it("should create GraphQLClient with endpoint and default headers", () => {
     const { GraphQLClient } = require("graphql-request");
-    expect(GraphQLClient).toHaveBeenCalledWith(
-      "https://api.example.com/graphql",
-      { headers: {} }
-    );
+    expect(GraphQLClient).toHaveBeenCalledWith("https://api.example.com/graphql", { headers: {} });
   });
 
   it("should create GraphQLClient with custom headers", () => {
@@ -31,10 +28,7 @@ describe("GraphQLClientWrapper", () => {
     new GraphQLClientWrapper("https://api.example.com/graphql", headers);
 
     const { GraphQLClient } = require("graphql-request");
-    expect(GraphQLClient).toHaveBeenCalledWith(
-      "https://api.example.com/graphql",
-      { headers }
-    );
+    expect(GraphQLClient).toHaveBeenCalledWith("https://api.example.com/graphql", { headers });
   });
 
   it("should execute mutation successfully", async () => {
@@ -59,14 +53,11 @@ describe("GraphQLClientWrapper", () => {
 
     const consoleSpy = jest.spyOn(console, "error").mockImplementation();
 
-    await expect(
-      clientWrapper.executeMutation(mutation, variables)
-    ).rejects.toThrow("GraphQL error");
-
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "GraphQL mutation failed after 3 attempts:",
-      error
+    await expect(clientWrapper.executeMutation(mutation, variables)).rejects.toThrow(
+      "GraphQL error",
     );
+
+    expect(consoleSpy).toHaveBeenCalledWith("GraphQL mutation failed after 3 attempts:", error);
 
     consoleSpy.mockRestore();
   });
@@ -99,11 +90,7 @@ describe("GraphQLClientWrapper", () => {
         .mockRejectedValueOnce(serverError)
         .mockResolvedValueOnce({ data: { result: "success" } });
 
-      const result = await clientWrapper.executeMutation(
-        mutation,
-        variables,
-        retryConfig
-      );
+      const result = await clientWrapper.executeMutation(mutation, variables, retryConfig);
 
       expect(mockRequest).toHaveBeenCalledTimes(3);
       expect(result).toEqual({ data: { result: "success" } });
@@ -125,9 +112,9 @@ describe("GraphQLClientWrapper", () => {
 
       mockRequest.mockRejectedValueOnce(clientError);
 
-      await expect(
-        clientWrapper.executeMutation(mutation, variables, retryConfig)
-      ).rejects.toThrow("Bad Request");
+      await expect(clientWrapper.executeMutation(mutation, variables, retryConfig)).rejects.toThrow(
+        "Bad Request",
+      );
 
       expect(mockRequest).toHaveBeenCalledTimes(1);
     });
@@ -150,11 +137,7 @@ describe("GraphQLClientWrapper", () => {
         .mockRejectedValueOnce(networkError)
         .mockResolvedValueOnce({ data: { result: "success" } });
 
-      const result = await clientWrapper.executeMutation(
-        mutation,
-        variables,
-        retryConfig
-      );
+      const result = await clientWrapper.executeMutation(mutation, variables, retryConfig);
 
       expect(mockRequest).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ data: { result: "success" } });
@@ -176,9 +159,9 @@ describe("GraphQLClientWrapper", () => {
 
       mockRequest.mockRejectedValue(serverError);
 
-      await expect(
-        clientWrapper.executeMutation(mutation, variables, retryConfig)
-      ).rejects.toThrow("Server Error");
+      await expect(clientWrapper.executeMutation(mutation, variables, retryConfig)).rejects.toThrow(
+        "Server Error",
+      );
 
       expect(mockRequest).toHaveBeenCalledTimes(2);
     });
@@ -203,11 +186,7 @@ describe("GraphQLClientWrapper", () => {
         .mockResolvedValueOnce({ data: { result: "success" } });
 
       const startTime = Date.now();
-      const result = await clientWrapper.executeMutation(
-        mutation,
-        variables,
-        retryConfig
-      );
+      const result = await clientWrapper.executeMutation(mutation, variables, retryConfig);
       const totalTime = Date.now() - startTime;
 
       expect(mockRequest).toHaveBeenCalledTimes(3);

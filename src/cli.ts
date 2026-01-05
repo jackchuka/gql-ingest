@@ -6,7 +6,7 @@ const program = new Command();
 program
   .name("gql-ingest")
   .description(
-    "A CLI tool for ingesting data from CSV files into a GraphQL API"
+    "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   )
   .version(require("../package.json").version);
 
@@ -14,21 +14,15 @@ program
   .requiredOption("-e, --endpoint <url>", "GraphQL endpoint URL")
   .requiredOption(
     "-c, --config <path>",
-    "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)"
+    "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)",
   )
   .option(
     "-n, --entities <entities>",
-    "Comma-separated list of specific entities to process (e.g., users,products)"
+    "Comma-separated list of specific entities to process (e.g., users,products)",
   )
-  .option(
-    "-h, --headers <headers>",
-    "JSON string of headers to include in requests"
-  )
+  .option("-h, --headers <headers>", "JSON string of headers to include in requests")
   .option("-v, --verbose", "Show detailed request results and responses")
-  .option(
-    "-f, --format <format>",
-    "Override data format detection (csv, json, yaml, jsonl)"
-  )
+  .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
   .action(async (options) => {
     try {
       console.log("Starting seed data generation...");

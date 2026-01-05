@@ -1,3 +1,4 @@
+// oxlint-disable no-unused-vars
 /**
  * TypeScript usage example of gql-ingest programmatic API
  *
@@ -41,20 +42,12 @@ async function basicTypedUsage(): Promise<void> {
   if (result.success) {
     const metrics: ProcessingMetrics = result.metrics;
     console.log(`Processed ${metrics.totalRows} rows`);
-    console.log(
-      `Success rate: ${
-        (metrics.successfulOperations / metrics.totalRows) * 100
-      }%`
-    );
+    console.log(`Success rate: ${(metrics.successfulOperations / metrics.totalRows) * 100}%`);
 
     // Access entity-specific metrics
-    Object.entries(metrics.entities).forEach(
-      ([entity, entityMetrics]: [string, EntityMetrics]) => {
-        console.log(
-          `${entity}: ${entityMetrics.rowsProcessed} rows in ${entityMetrics.duration}ms`
-        );
-      }
-    );
+    Object.entries(metrics.entities).forEach(([entity, entityMetrics]: [string, EntityMetrics]) => {
+      console.log(`${entity}: ${entityMetrics.rowsProcessed} rows in ${entityMetrics.duration}ms`);
+    });
   } else {
     // Type-safe error handling
     result.errors?.forEach((error: string) => {
@@ -68,7 +61,10 @@ class DataIngestionService {
   private client: GQLIngest;
   private readonly defaultOptions: IngestOptions;
 
-  constructor(endpoint: string, private readonly apiKey: string) {
+  constructor(
+    endpoint: string,
+    private readonly apiKey: string,
+  ) {
     this.client = new GQLIngest({
       endpoint,
       headers: {
@@ -95,10 +91,7 @@ class DataIngestionService {
     });
   }
 
-  async ingestWithRetry(
-    configPath: string,
-    maxRetries: number = 3
-  ): Promise<IngestResult> {
+  async ingestWithRetry(configPath: string, maxRetries: number = 3): Promise<IngestResult> {
     let lastResult: IngestResult | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -130,19 +123,14 @@ class DataIngestionService {
 
 // Example 3: Using with async/await error handling
 async function robustIngestion(): Promise<void> {
-  const service = new DataIngestionService(
-    "https://api.example.com/graphql",
-    "your-api-key"
-  );
+  const service = new DataIngestionService("https://api.example.com/graphql", "your-api-key");
 
   try {
     // Ingest users with retry logic
     const userResult = await service.ingestWithRetry("./config/users");
 
     if (!userResult.success) {
-      throw new Error(
-        `Failed to ingest users: ${userResult.errors?.join(", ")}`
-      );
+      throw new Error(`Failed to ingest users: ${userResult.errors?.join(", ")}`);
     }
 
     // Ingest products
@@ -166,9 +154,7 @@ async function robustIngestion(): Promise<void> {
 }
 
 // Example 4: Custom type guards and utilities
-function isSuccessfulResult(
-  result: IngestResult
-): result is IngestResult & { success: true } {
+function isSuccessfulResult(result: IngestResult): result is IngestResult & { success: true } {
   return result.success === true;
 }
 
@@ -180,10 +166,7 @@ function generateReport(metrics: ProcessingMetrics): void {
       successful: metrics.successfulOperations,
       failed: metrics.failedOperations,
       duration: `${metrics.totalDuration}ms`,
-      successRate: `${(
-        (metrics.successfulOperations / metrics.totalRows) *
-        100
-      ).toFixed(2)}%`,
+      successRate: `${((metrics.successfulOperations / metrics.totalRows) * 100).toFixed(2)}%`,
     },
     entities: Object.entries(metrics.entities).map(([name, data]) => ({
       name,

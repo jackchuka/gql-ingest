@@ -34,8 +34,8 @@ npx @jackchuka/gql-ingest --endpoint <url> --config <path>
 ```bash
 git clone https://github.com/jackchuka/gql-ingest.git
 cd gql-ingest
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Usage
@@ -478,11 +478,11 @@ YAML provides a more readable alternative:
 ### Scripts
 
 ```bash
-npm run build       # Build CLI bundle with esbuild
-npm run build:types # Generate TypeScript declarations
-npm run build:all   # Build bundle + types
-npm run dev         # Run in development mode
-npm run test        # Run test suite
+pnpm run build       # Build CLI bundle with esbuild
+pnpm run build:types # Generate TypeScript declarations
+pnpm run build:all   # Build bundle + types
+pnpm run dev         # Run in development mode
+pnpm run test        # Run test suite
 ```
 
 ## How It Works

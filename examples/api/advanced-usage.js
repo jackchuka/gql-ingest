@@ -1,3 +1,4 @@
+// oxlint-disable no-unused-vars
 /**
  * Advanced usage example of gql-ingest programmatic API
  *
@@ -67,9 +68,7 @@ async function customIngestionPipeline() {
 
     // Process entities with custom error handling and logging
     for (const entityName of wave.entities) {
-      const mappingPath = mappingPaths.find(
-        (p) => basename(p, ".json") === entityName
-      );
+      const mappingPath = mappingPaths.find((p) => basename(p, ".json") === entityName);
 
       if (!mappingPath) continue;
 

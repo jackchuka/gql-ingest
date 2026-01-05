@@ -1,15 +1,8 @@
 import { GraphQLClientWrapper } from "./graphql-client";
-import { DataMapper, MappingConfig } from "./mapper";
+import { DataMapper } from "./mapper";
 import { MetricsCollector, ProcessingMetrics } from "./metrics";
-import { DependencyResolver, ExecutionWave } from "./dependency-resolver";
-import {
-  loadConfig,
-  getEntityConfig,
-  getRetryConfig,
-  ProcessingConfig,
-  ParallelProcessingConfig,
-  RetryConfig,
-} from "./config";
+import { DependencyResolver } from "./dependency-resolver";
+import { loadConfig, getEntityConfig, getRetryConfig, ProcessingConfig } from "./config";
 import { basename } from "path";
 
 /**
@@ -70,18 +63,13 @@ export class GQLIngest {
 
     // Initialize components
     this.metrics = new MetricsCollector();
-    this.client = new GraphQLClientWrapper(
-      this.endpoint,
-      this.headers,
-      this.metrics,
-      this.verbose
-    );
+    this.client = new GraphQLClientWrapper(this.endpoint, this.headers, this.metrics, this.verbose);
     this.mapper = new DataMapper(
       this.client,
       process.cwd(),
       this.metrics,
       this.verbose,
-      this.formatOverride
+      this.formatOverride,
     );
   }
 
@@ -91,10 +79,7 @@ export class GQLIngest {
    * @param options Optional ingestion options
    * @returns Promise with ingestion result
    */
-  async ingest(
-    configPath: string,
-    options?: IngestOptions
-  ): Promise<IngestResult> {
+  async ingest(configPath: string, options?: IngestOptions): Promise<IngestResult> {
     const errors: string[] = [];
 
     try {
@@ -106,7 +91,7 @@ export class GQLIngest {
         this.endpoint,
         this.headers,
         this.metrics,
-        options?.verbose ?? this.verbose
+        options?.verbose ?? this.verbose,
       );
 
       this.mapper = new DataMapper(
@@ -114,7 +99,7 @@ export class GQLIngest {
         process.cwd(),
         this.metrics,
         options?.verbose ?? this.verbose,
-        options?.format ?? this.formatOverride
+        options?.format ?? this.formatOverride,
       );
 
       // Load configuration
@@ -124,24 +109,17 @@ export class GQLIngest {
       let entityFilter: string[] | undefined;
       if (options?.entities) {
         if (typeof options.entities === "string") {
-          entityFilter = options.entities
-            .split(",")
-            .map((e: string) => e.trim());
+          entityFilter = options.entities.split(",").map((e: string) => e.trim());
         } else {
           entityFilter = options.entities;
         }
       }
 
       // Discover all mapping files dynamically
-      const mappingPaths = this.mapper.discoverMappings(
-        configPath,
-        entityFilter
-      );
+      const mappingPaths = this.mapper.discoverMappings(configPath, entityFilter);
 
       if (mappingPaths.length === 0) {
-        const filterMsg = entityFilter
-          ? ` matching entities: ${entityFilter.join(", ")}`
-          : "";
+        const filterMsg = entityFilter ? ` matching entities: ${entityFilter.join(", ")}` : "";
         const warning = `No mapping files found in ${configPath}/mappings${filterMsg}`;
         console.warn(warning);
         return {
@@ -168,7 +146,7 @@ export class GQLIngest {
       const resolver = new DependencyResolver(
         entityNames,
         relevantDependencies,
-        !!entityFilter // Allow partial resolution when using --entities
+        !!entityFilter, // Allow partial resolution when using --entities
       );
 
       // Validate dependencies
@@ -178,9 +156,7 @@ export class GQLIngest {
           // When using entities filter, show warnings instead of errors
           console.warn("\\n⚠️  Warning: Dependency validation issues:");
           validationErrors.forEach((error) => console.warn(`  - ${error}`));
-          console.warn(
-            "This may cause errors if the dependent data doesn't already exist.\\n"
-          );
+          console.warn("This may cause errors if the dependent data doesn't already exist.\\n");
         } else {
           // Strict validation when processing all entities
           console.error("Dependency validation errors:");
@@ -197,12 +173,7 @@ export class GQLIngest {
       }
 
       // Process entities
-      await this.processEntitiesInWaves(
-        mappingPaths,
-        resolver,
-        this.mapper,
-        config
-      );
+      await this.processEntitiesInWaves(mappingPaths, resolver, this.mapper, config);
 
       this.metrics.finishProcessing();
 
@@ -211,8 +182,7 @@ export class GQLIngest {
         success: true,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("Error:", errorMessage);
       errors.push(errorMessage);
 
@@ -230,10 +200,7 @@ export class GQLIngest {
    * @param entities Array of entity names to process
    * @returns Promise with ingestion result
    */
-  async ingestEntities(
-    configPath: string,
-    entities: string[]
-  ): Promise<IngestResult> {
+  async ingestEntities(configPath: string, entities: string[]): Promise<IngestResult> {
     return this.ingest(configPath, { entities });
   }
 
@@ -275,18 +242,13 @@ export class GQLIngest {
    */
   setVerbose(verbose: boolean): void {
     this.verbose = verbose;
-    this.client = new GraphQLClientWrapper(
-      this.endpoint,
-      this.headers,
-      this.metrics,
-      verbose
-    );
+    this.client = new GraphQLClientWrapper(this.endpoint, this.headers, this.metrics, verbose);
     this.mapper = new DataMapper(
       this.client,
       process.cwd(),
       this.metrics,
       verbose,
-      this.formatOverride
+      this.formatOverride,
     );
   }
 
@@ -296,18 +258,13 @@ export class GQLIngest {
    */
   setHeaders(headers: Record<string, string>): void {
     this.headers = headers;
-    this.client = new GraphQLClientWrapper(
-      this.endpoint,
-      headers,
-      this.metrics,
-      this.verbose
-    );
+    this.client = new GraphQLClientWrapper(this.endpoint, headers, this.metrics, this.verbose);
     this.mapper = new DataMapper(
       this.client,
       process.cwd(),
       this.metrics,
       this.verbose,
-      this.formatOverride
+      this.formatOverride,
     );
   }
 
@@ -318,21 +275,15 @@ export class GQLIngest {
     mappingPaths: string[],
     resolver: DependencyResolver,
     mapper: DataMapper,
-    config: ProcessingConfig
+    config: ProcessingConfig,
   ): Promise<void> {
     const waves = resolver.resolveExecutionOrder();
-    const pathMap = new Map(
-      mappingPaths.map((path) => [basename(path, ".json"), path])
-    );
+    const pathMap = new Map(mappingPaths.map((path) => [basename(path, ".json"), path]));
 
     console.log(`Processing ${waves.length} dependency waves...`);
 
     for (const wave of waves) {
-      console.log(
-        `Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(
-          ", "
-        )}]`
-      );
+      console.log(`Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`);
 
       // Process entities in controlled batches based on entityConcurrency
       const entityConcurrency = config.parallelProcessing.entityConcurrency;

@@ -32,10 +32,7 @@ async function main() {
 
     // Example 2: Process only specific entities
     console.log("\nProcessing specific entities...");
-    const partialResult = await client.ingestEntities("./config", [
-      "users",
-      "products",
-    ]);
+    const partialResult = await client.ingestEntities("./config", ["users", "products"]);
 
     if (partialResult.success) {
       console.log("✅ Partial ingestion completed successfully");
