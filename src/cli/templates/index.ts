@@ -16,12 +16,13 @@ export async function generateExampleEntity(
   basePath: string,
   force: boolean,
   logger: Logger,
+  format: DataFormat = "csv",
 ): Promise<void> {
   await generateEntityFiles(
     basePath,
     "example",
     {
-      format: "csv",
+      format,
       fields: ["id", "name", "email"],
       mutationName: "CreateUser",
     },

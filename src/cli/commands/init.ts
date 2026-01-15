@@ -1,13 +1,21 @@
 import { Command } from "commander";
 import path from "path";
+import { select } from "@inquirer/prompts";
 import { createConsoleLogger, noopLogger } from "../../lib/logger";
-import { generateExampleEntity, generateConfigYaml, ensureDirectories } from "../templates";
+import {
+  generateExampleEntity,
+  generateConfigYaml,
+  ensureDirectories,
+  DataFormat,
+} from "../templates";
 
 interface InitOptions {
   example: boolean;
   config: boolean;
   force: boolean;
   quiet: boolean;
+  format?: string;
+  interactive: boolean;
 }
 
 export function registerInitCommand(program: Command): void {
@@ -18,11 +26,40 @@ export function registerInitCommand(program: Command): void {
     .option("--no-config", "Skip creating config.yaml")
     .option("-f, --force", "Overwrite existing files", false)
     .option("-q, --quiet", "Suppress output", false)
+    .option("--format <format>", "Data format for example entity (csv, json, yaml, jsonl)")
+    .option("--no-interactive", "Skip prompts, use defaults only")
     .action(async (targetPath: string | undefined, options: InitOptions) => {
       const logger = options.quiet ? noopLogger : createConsoleLogger();
       const resolvedPath = path.resolve(targetPath || process.cwd());
 
       try {
+        // Determine if interactive mode is available
+        const isInteractive = options.interactive && process.stdin.isTTY;
+
+        // Determine data format
+        let format: DataFormat = "csv";
+        if (options.example) {
+          if (isInteractive) {
+            format = (await select({
+              message: "Select data format for example entity:",
+              choices: [
+                { name: "CSV", value: "csv" },
+                { name: "JSON", value: "json" },
+                { name: "YAML", value: "yaml" },
+                { name: "JSONL", value: "jsonl" },
+              ],
+              default: "csv",
+            })) as DataFormat;
+          } else if (options.format) {
+            const validFormats = ["csv", "json", "yaml", "jsonl"];
+            if (!validFormats.includes(options.format)) {
+              logger.error(`Invalid format. Must be one of: ${validFormats.join(", ")}`);
+              process.exit(1);
+            }
+            format = options.format as DataFormat;
+          }
+        }
+
         // Create directories
         ensureDirectories(resolvedPath, logger);
 
@@ -33,7 +70,7 @@ export function registerInitCommand(program: Command): void {
 
         // Create example entity if requested (default: true)
         if (options.example) {
-          await generateExampleEntity(resolvedPath, options.force, logger);
+          await generateExampleEntity(resolvedPath, options.force, logger, format);
         }
 
         logger.info("");
@@ -45,6 +82,10 @@ export function registerInitCommand(program: Command): void {
         logger.info("  3. Configure mappings in mappings/");
         logger.info(`  4. Run: gql-ingest -e <endpoint> -c ${resolvedPath}`);
       } catch (error) {
+        if ((error as Error).name === "ExitPromptError") {
+          // User cancelled the prompt
+          process.exit(0);
+        }
         logger.error("Error initializing configuration:", error);
         process.exit(1);
       }
