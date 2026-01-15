@@ -1,6 +1,6 @@
 {
   "name": "@jackchuka/gql-ingest",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   "keywords": [
     "api",
@@ -43,11 +43,13 @@
     "prepublishOnly": "pnpm run build:all"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "commander": "^14.0.0",
     "csv-parser": "^3.0.0",
     "graphql": "16.12.0",
     "graphql-request": "^7.2.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

@@ -40,7 +40,101 @@ pnpm install
 pnpm run build
 ```
 
+## Quick Start
+
+Initialize a new configuration and start ingesting data in minutes:
+
+```bash
+# Create a new configuration directory
+gql-ingest init ./my-config
+
+# Add a new entity
+gql-ingest add users -p ./my-config -f json --fields "id,name,email"
+
+# Run ingestion
+gql-ingest -e https://your-api.com/graphql -c ./my-config
+```
+
 ## Usage
+
+### CLI Commands
+
+#### Initialize Configuration
+
+Create a new configuration directory with example files:
+
+```bash
+gql-ingest init [path] [options]
+
+Options:
+  --no-example  Skip creating example entity files
+  --no-config   Skip creating config.yaml
+  -f, --force   Overwrite existing files
+  -q, --quiet   Suppress output
+```
+
+This creates:
+
+- `data/` - Data files directory
+- `graphql/` - GraphQL mutation files
+- `mappings/` - Mapping configuration files
+- `config.yaml` - Processing configuration
+- Example entity files (by default)
+
+#### Add Entity
+
+Add a new entity to an existing configuration:
+
+```bash
+gql-ingest add <entity-name> [options]
+
+Options:
+  -p, --path <path>      Config directory path (default: current directory)
+  -f, --format <format>  Data format (csv, json, yaml, jsonl)
+  --fields <fields>      Comma-separated field names
+  --mutation <name>      GraphQL mutation name
+  --no-interactive       Skip prompts, use defaults only
+  -q, --quiet            Suppress output
+```
+
+Interactive mode prompts for format, fields, and mutation name. Use `--no-interactive` with flags for CI/CD.
+
+#### Run Ingestion
+
+Ingest data from configuration into GraphQL API:
+
+```bash
+gql-ingest [options]
+
+Options:
+  -e, --endpoint <url>     GraphQL endpoint URL (required)
+  -c, --config <path>      Path to configuration directory (required)
+  -n, --entities <list>    Comma-separated list of entities to process
+  -h, --headers <headers>  JSON string of headers
+  -f, --format <format>    Override data format detection
+  -q, --quiet              Suppress output
+```
+
+### CLI Examples
+
+```bash
+# Basic usage
+gql-ingest \
+  -e https://your-graphql-api.com/graphql \
+  -c ./examples/demo
+
+# With authentication headers
+gql-ingest \
+  -e https://your-graphql-api.com/graphql \
+  -c ./examples/demo \
+  -h '{"Authorization": "Bearer YOUR_TOKEN"}'
+
+# Process specific entities only
+gql-ingest \
+  -e https://your-graphql-api.com/graphql \
+  -c ./examples/demo \
+  -n users,products
+```
 
 ### Programmatic API
 
@@ -63,7 +157,7 @@ const client = new GQLIngest({
   headers: {
     Authorization: "Bearer YOUR_TOKEN",
   },
-  logger: createConsoleLogger(), // Optional: enable console logging
+  logger: createConsoleLogger({ prefix: "my-app" }), // Optional: enable logging with prefix
 });
 
 // Ingest all data from a configuration
@@ -152,7 +246,9 @@ const client = new GQLIngest({
 client.on("started", (p) => console.log(`Starting ${p.totalEntities} entities`));
 client.on("progress", (p) => console.log(`${p.progressPercent.toFixed(1)}% complete`));
 client.on("entityStart", (p) => console.log(`Processing ${p.entityName}`));
-client.on("entityComplete", (p) => console.log(`${p.entityName}: ${p.metrics.successfulRows} rows`));
+client.on("entityComplete", (p) =>
+  console.log(`${p.entityName}: ${p.metrics.successfulRows} rows`),
+);
 client.on("rowSuccess", (p) => console.log(`Row ${p.rowIndex} OK`));
 client.on("rowFailure", (p) => console.error(`Row ${p.rowIndex} failed: ${p.error.message}`));
 client.on("finished", (p) => console.log(`Done in ${p.durationMs}ms`));
@@ -218,55 +314,6 @@ import type {
   FinishedEventPayload,
   ErroredEventPayload,
 } from "@jackchuka/gql-ingest";
-```
-
-### CLI Options
-
-```bash
-gql-ingest [options]
-
-Options:
-  -V, --version            output the version number
-  -e, --endpoint <url>     GraphQL endpoint URL (required)
-  -c, --config <path>      Path to configuration directory (required)
-  -n, --entities <list>    Comma-separated list of specific entities to process
-  -h, --headers <headers>  JSON string of headers to include in requests
-  -f, --format <format>    Override data format detection (csv, json, yaml, jsonl)
-  -v, --verbose            Show detailed request results and responses
-  --help                   display help for command
-```
-
-### Examples
-
-```bash
-# Basic usage
-npx @jackchuka/gql-ingest \
-  --endpoint https://your-graphql-api.com/graphql \
-  --config ./examples/demo
-
-# With authentication headers
-npx @jackchuka/gql-ingest \
-  --endpoint https://your-graphql-api.com/graphql \
-  --config ./examples/demo \
-  --headers '{"Authorization": "Bearer YOUR_TOKEN"}'
-
-# With custom headers
-npx @jackchuka/gql-ingest \
-  --endpoint https://api.example.com/graphql \
-  --config ./my-config \
-  --headers '{"X-API-Key": "your-api-key", "Content-Type": "application/json"}'
-
-# Process specific entities only
-npx @jackchuka/gql-ingest \
-  --endpoint https://your-graphql-api.com/graphql \
-  --config ./examples/demo \
-  --entities users,products
-
-# Process a single entity
-npx @jackchuka/gql-ingest \
-  --endpoint https://your-graphql-api.com/graphql \
-  --config ./examples/demo \
-  --entities items
 ```
 
 ## Parallel Processing 🚀

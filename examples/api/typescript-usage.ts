@@ -24,7 +24,7 @@ async function basicTypedUsage(): Promise<void> {
     headers: {
       Authorization: "Bearer YOUR_TOKEN",
     },
-    logger: createConsoleLogger(),
+    logger: createConsoleLogger({ prefix: "gql-ingest" }), // Optional prefix
     formatOverride: "csv",
   };
 

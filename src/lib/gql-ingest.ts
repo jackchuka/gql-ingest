@@ -3,7 +3,7 @@ import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
 import { MetricsCollector, ProcessingMetrics } from "./metrics";
 import { DependencyResolver } from "./dependency-resolver";
-import { loadConfig, getEntityConfig, getRetryConfig, ProcessingConfig } from "./config";
+import { loadConfig, getEntityConfig, getRetryConfig, Config } from "./config";
 import { Logger, noopLogger } from "./logger";
 import { basename } from "path";
 import {
@@ -499,7 +499,7 @@ export class GQLIngest extends EventEmitter {
     mappingPaths: string[],
     resolver: DependencyResolver,
     mapper: DataMapper,
-    config: ProcessingConfig,
+    config: Config,
     logger: Logger,
     signal?: AbortSignal,
   ): Promise<void> {
