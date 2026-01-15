@@ -3,6 +3,7 @@ import { DataMapper } from "./mapper";
 import { MetricsCollector, ProcessingMetrics } from "./metrics";
 import { DependencyResolver } from "./dependency-resolver";
 import { loadConfig, getEntityConfig, getRetryConfig, ProcessingConfig } from "./config";
+import { Logger, noopLogger } from "./logger";
 import { basename } from "path";
 
 /**
@@ -13,8 +14,8 @@ export interface GQLIngestOptions {
   endpoint: string;
   /** Optional headers to include in GraphQL requests */
   headers?: Record<string, string>;
-  /** Enable verbose logging */
-  verbose?: boolean;
+  /** Logger instance. Defaults to silent no-op logger. */
+  logger?: Logger;
   /** Override data format detection (csv, json, yaml, jsonl) */
   formatOverride?: string;
 }
@@ -25,8 +26,6 @@ export interface GQLIngestOptions {
 export interface IngestOptions {
   /** Comma-separated list or array of specific entities to process */
   entities?: string[] | string;
-  /** Enable verbose logging for this operation */
-  verbose?: boolean;
   /** Override data format detection for this operation */
   format?: string;
 }
@@ -49,7 +48,7 @@ export interface IngestResult {
 export class GQLIngest {
   private endpoint: string;
   private headers: Record<string, string>;
-  private verbose: boolean;
+  private logger: Logger;
   private formatOverride?: string;
   private metrics: MetricsCollector;
   private client: GraphQLClientWrapper;
@@ -58,17 +57,17 @@ export class GQLIngest {
   constructor(options: GQLIngestOptions) {
     this.endpoint = options.endpoint;
     this.headers = options.headers || {};
-    this.verbose = options.verbose || false;
+    this.logger = options.logger ?? noopLogger;
     this.formatOverride = options.formatOverride;
 
     // Initialize components
     this.metrics = new MetricsCollector();
-    this.client = new GraphQLClientWrapper(this.endpoint, this.headers, this.metrics, this.verbose);
+    this.client = new GraphQLClientWrapper(this.endpoint, this.headers, this.metrics, this.logger);
     this.mapper = new DataMapper(
       this.client,
       process.cwd(),
       this.metrics,
-      this.verbose,
+      this.logger,
       this.formatOverride,
     );
   }
@@ -86,24 +85,24 @@ export class GQLIngest {
       // Reset metrics for new operation
       this.metrics = new MetricsCollector();
 
-      // Update client and mapper with new metrics
+      // Update client and mapper with new metrics and logger
       this.client = new GraphQLClientWrapper(
         this.endpoint,
         this.headers,
         this.metrics,
-        options?.verbose ?? this.verbose,
+        this.logger,
       );
 
       this.mapper = new DataMapper(
         this.client,
         process.cwd(),
         this.metrics,
-        options?.verbose ?? this.verbose,
+        this.logger,
         options?.format ?? this.formatOverride,
       );
 
       // Load configuration
-      const config = loadConfig(configPath);
+      const config = loadConfig(configPath, this.logger);
 
       // Parse entities filter if provided
       let entityFilter: string[] | undefined;
@@ -121,7 +120,7 @@ export class GQLIngest {
       if (mappingPaths.length === 0) {
         const filterMsg = entityFilter ? ` matching entities: ${entityFilter.join(", ")}` : "";
         const warning = `No mapping files found in ${configPath}/mappings${filterMsg}`;
-        console.warn(warning);
+        this.logger.warn(warning);
         return {
           metrics: this.metrics.getMetrics(),
           success: false,
@@ -154,14 +153,14 @@ export class GQLIngest {
       if (validationErrors.length > 0) {
         if (entityFilter) {
           // When using entities filter, show warnings instead of errors
-          console.warn("\\n⚠️  Warning: Dependency validation issues:");
-          validationErrors.forEach((error) => console.warn(`  - ${error}`));
-          console.warn("This may cause errors if the dependent data doesn't already exist.\\n");
+          this.logger.warn("\n⚠️  Warning: Dependency validation issues:");
+          validationErrors.forEach((error) => this.logger.warn(`  - ${error}`));
+          this.logger.warn("This may cause errors if the dependent data doesn't already exist.\n");
         } else {
           // Strict validation when processing all entities
-          console.error("Dependency validation errors:");
+          this.logger.error("Dependency validation errors:");
           validationErrors.forEach((error) => {
-            console.error(`  - ${error}`);
+            this.logger.error(`  - ${error}`);
             errors.push(error);
           });
           return {
@@ -173,7 +172,7 @@ export class GQLIngest {
       }
 
       // Process entities
-      await this.processEntitiesInWaves(mappingPaths, resolver, this.mapper, config);
+      await this.processEntitiesInWaves(mappingPaths, resolver, this.mapper, config, this.logger);
 
       this.metrics.finishProcessing();
 
@@ -183,7 +182,7 @@ export class GQLIngest {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("Error:", errorMessage);
+      this.logger.error(`Error: ${errorMessage}`);
       errors.push(errorMessage);
 
       return {
@@ -237,17 +236,17 @@ export class GQLIngest {
   }
 
   /**
-   * Set verbose mode
-   * @param verbose Enable or disable verbose mode
+   * Set the logger instance
+   * @param logger Logger instance to use
    */
-  setVerbose(verbose: boolean): void {
-    this.verbose = verbose;
-    this.client = new GraphQLClientWrapper(this.endpoint, this.headers, this.metrics, verbose);
+  setLogger(logger: Logger): void {
+    this.logger = logger;
+    this.client = new GraphQLClientWrapper(this.endpoint, this.headers, this.metrics, logger);
     this.mapper = new DataMapper(
       this.client,
       process.cwd(),
       this.metrics,
-      verbose,
+      logger,
       this.formatOverride,
     );
   }
@@ -258,12 +257,12 @@ export class GQLIngest {
    */
   setHeaders(headers: Record<string, string>): void {
     this.headers = headers;
-    this.client = new GraphQLClientWrapper(this.endpoint, headers, this.metrics, this.verbose);
+    this.client = new GraphQLClientWrapper(this.endpoint, headers, this.metrics, this.logger);
     this.mapper = new DataMapper(
       this.client,
       process.cwd(),
       this.metrics,
-      this.verbose,
+      this.logger,
       this.formatOverride,
     );
   }
@@ -276,14 +275,15 @@ export class GQLIngest {
     resolver: DependencyResolver,
     mapper: DataMapper,
     config: ProcessingConfig,
+    logger: Logger,
   ): Promise<void> {
     const waves = resolver.resolveExecutionOrder();
     const pathMap = new Map(mappingPaths.map((path) => [basename(path, ".json"), path]));
 
-    console.log(`Processing ${waves.length} dependency waves...`);
+    logger.info(`Processing ${waves.length} dependency waves...`);
 
     for (const wave of waves) {
-      console.log(`Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`);
+      logger.info(`Wave ${wave.wave + 1}: Processing entities [${wave.entities.join(", ")}]`);
 
       // Process entities in controlled batches based on entityConcurrency
       const entityConcurrency = config.parallelProcessing.entityConcurrency;
@@ -294,11 +294,11 @@ export class GQLIngest {
           const configPath = pathMap.get(entityName);
           if (configPath) {
             try {
-              const entityConfig = getEntityConfig(entityName, config);
+              const entityConfig = getEntityConfig(entityName, config, logger);
               const retryConfig = getRetryConfig(entityName, config);
               await mapper.processEntity(configPath, entityConfig, retryConfig);
             } catch (error) {
-              console.warn(`Warning: Could not process ${configPath}:`, error);
+              logger.warn(`Warning: Could not process ${configPath}: ${error}`);
             }
           }
         });

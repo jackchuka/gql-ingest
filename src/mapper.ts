@@ -5,6 +5,7 @@ import { DataReaderFactory, DataRow } from "./readers";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
 import { ParallelProcessingConfig, RetryConfig } from "./config";
+import { Logger, noopLogger } from "./logger";
 
 export interface MappingConfig {
   // Legacy CSV support
@@ -20,20 +21,20 @@ export class DataMapper {
   private client: GraphQLClientWrapper;
   private basePath: string;
   private metrics: MetricsCollector;
-  private verbose: boolean;
+  private logger: Logger;
   private formatOverride?: string;
 
   constructor(
     client: GraphQLClientWrapper,
     basePath: string = process.cwd(),
     metrics?: MetricsCollector,
-    verbose: boolean = false,
+    logger: Logger = noopLogger,
     formatOverride?: string,
   ) {
     this.client = client;
     this.basePath = basePath;
     this.metrics = metrics || new MetricsCollector();
-    this.verbose = verbose;
+    this.logger = logger;
     this.formatOverride = formatOverride;
   }
 
@@ -61,7 +62,7 @@ export class DataMapper {
         // Check for requested entities that were not found
         const notFound = entityFilter.filter((e) => !foundEntities.has(e));
         if (notFound.length > 0) {
-          console.warn(
+          this.logger.warn(
             `Warning: The following entities were not found in mappings: ${notFound.join(", ")}`,
           );
         }
@@ -69,10 +70,10 @@ export class DataMapper {
 
       jsonFiles.sort(); // Alphabetical order for consistent processing
 
-      console.log(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
+      this.logger.info(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
       return jsonFiles.map((file) => path.join(configDir, "mappings", file));
     } catch (error) {
-      console.error(`Error reading mappings directory ${mappingsPath}:`, error);
+      this.logger.error(`Error reading mappings directory ${mappingsPath}: ${error}`);
       return [];
     }
   }
@@ -83,7 +84,7 @@ export class DataMapper {
     retryConfig?: RetryConfig,
   ): Promise<void> {
     const entityName = path.basename(configPath, ".json");
-    console.log(`Processing entity: ${configPath}`);
+    this.logger.info(`Processing entity: ${configPath}`);
 
     this.metrics.startEntityProcessing(entityName);
 
@@ -146,19 +147,14 @@ export class DataMapper {
         await this.client.executeMutation(mutation, variables, retryConfig);
         this.metrics.recordSuccess(entityName);
 
-        // Show progress every 10% or at the end (only in non-verbose mode)
-        if (
-          !this.verbose &&
-          ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1)
-        ) {
+        // Show progress every 10% or at the end
+        if ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1) {
           const progress = (((i + 1) / totalRows) * 100).toFixed(1);
-          console.log(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
+          this.logger.info(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
         }
       } catch (error) {
         this.metrics.recordFailure(entityName);
-        if (!this.verbose) {
-          console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
-        }
+        this.logger.error(`✗ Failed to create entity for row ${i + 1}`, row, error);
       }
     }
   }
@@ -172,7 +168,7 @@ export class DataMapper {
     retryConfig?: RetryConfig,
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
-    console.log(`Processing ${data.length} rows with concurrency: ${concurrency}`);
+    this.logger.info(`Processing ${data.length} rows with concurrency: ${concurrency}`);
 
     // Extract variable types once for all rows
     const variableTypes = this.extractVariableTypes(mutation);
@@ -211,27 +207,21 @@ export class DataMapper {
             chunkSuccesses++;
           } else {
             chunkFailures++;
-            if (!this.verbose) {
-              console.error(`✗ Failed to create entity for row:`, row, error);
-            }
+            this.logger.error(`✗ Failed to create entity for row`, row, error);
           }
         } else {
           chunkFailures++;
-          if (!this.verbose) {
-            console.error(`✗ Promise rejected:`, result.reason);
-          }
+          this.logger.error(`✗ Promise rejected: ${result.reason}`);
         }
       });
 
-      // Show progress update (only in non-verbose mode)
-      if (!this.verbose) {
-        const progress = ((processedCount / totalRows) * 100).toFixed(1);
-        console.log(
-          `📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${
-            chunkIndex + 1
-          }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`,
-        );
-      }
+      // Show progress update
+      const progress = ((processedCount / totalRows) * 100).toFixed(1);
+      this.logger.info(
+        `📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${
+          chunkIndex + 1
+        }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`,
+      );
     }
   }
 
@@ -350,7 +340,7 @@ export class DataMapper {
         }
       }
     } catch (error) {
-      console.error("Error parsing GraphQL mutation:", error);
+      this.logger.error(`Error parsing GraphQL mutation: ${error}`);
     }
 
     return types;
@@ -390,7 +380,7 @@ export class DataMapper {
         const intValue = Number(trimmedValue);
         // Validate that it's a valid integer (no decimals, NaN, or Infinity)
         if (isNaN(intValue) || !isFinite(intValue) || !Number.isInteger(intValue)) {
-          console.warn(
+          this.logger.warn(
             `Warning: Cannot convert "${value}" to Int for variable $${varName}. Expected a valid integer. Using original value.`,
           );
           return value;
@@ -401,7 +391,7 @@ export class DataMapper {
         const floatValue = Number(trimmedValue);
         // Number() is more strict than parseFloat() - it requires the entire string to be valid
         if (isNaN(floatValue) || !isFinite(floatValue)) {
-          console.warn(
+          this.logger.warn(
             `Warning: Cannot convert "${value}" to Float for variable $${varName}. Expected a valid number. Using original value.`,
           );
           return value;
@@ -412,7 +402,7 @@ export class DataMapper {
         const lowerValue = trimmedValue.toLowerCase();
         if (lowerValue === "true" || lowerValue === "1") return true;
         if (lowerValue === "false" || lowerValue === "0") return false;
-        console.warn(
+        this.logger.warn(
           `Warning: Cannot convert "${value}" to Boolean for variable $${varName}. Expected "true", "false", "1", or "0". Using original value.`,
         );
         return value;
@@ -422,11 +412,9 @@ export class DataMapper {
 
       default:
         // Unknown scalar type - keep as string for safety
-        if (this.verbose) {
-          console.log(
-            `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`,
-          );
-        }
+        this.logger.debug(
+          `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`,
+        );
         return value;
     }
   }

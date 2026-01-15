@@ -7,6 +7,8 @@
 // Re-export all types from main modules
 export type { GQLIngestOptions, IngestOptions, IngestResult } from "./gql-ingest";
 
+export type { Logger } from "./logger";
+
 export type {
   ParallelProcessingConfig,
   RetryConfig,

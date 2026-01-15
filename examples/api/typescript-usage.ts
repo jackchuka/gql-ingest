@@ -13,6 +13,7 @@ import {
   IngestResult,
   ProcessingMetrics,
   EntityMetrics,
+  createConsoleLogger,
 } from "@jackchuka/gql-ingest";
 
 // Example 1: Basic usage with type annotations
@@ -23,7 +24,7 @@ async function basicTypedUsage(): Promise<void> {
     headers: {
       Authorization: "Bearer YOUR_TOKEN",
     },
-    verbose: true,
+    logger: createConsoleLogger(),
     formatOverride: "csv",
   };
 
@@ -32,7 +33,6 @@ async function basicTypedUsage(): Promise<void> {
   // Ingest with typed options
   const ingestOptions: IngestOptions = {
     entities: ["users", "products"],
-    verbose: true,
     format: "json",
   };
 
@@ -72,9 +72,7 @@ class DataIngestionService {
       },
     });
 
-    this.defaultOptions = {
-      verbose: false,
-    };
+    this.defaultOptions = {};
   }
 
   async ingestUsers(configPath: string): Promise<IngestResult> {

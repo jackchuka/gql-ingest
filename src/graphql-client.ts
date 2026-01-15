@@ -1,23 +1,24 @@
 import { GraphQLClient } from "graphql-request";
 import { MetricsCollector } from "./metrics";
 import { DEFAULT_RETRY_CONFIG, RetryConfig } from "./config";
+import { Logger, noopLogger } from "./logger";
 
 export class GraphQLClientWrapper {
   private client: GraphQLClient;
   private metrics?: MetricsCollector;
-  private verbose: boolean;
+  private logger: Logger;
 
   constructor(
     endpoint: string,
     headers?: Record<string, string>,
     metrics?: MetricsCollector,
-    verbose: boolean = false,
+    logger: Logger = noopLogger,
   ) {
     this.client = new GraphQLClient(endpoint, {
       headers: headers || {},
     });
     this.metrics = metrics;
-    this.verbose = verbose;
+    this.logger = logger;
   }
 
   async executeMutation(
@@ -44,11 +45,9 @@ export class GraphQLClientWrapper {
           }
         }
 
-        if (this.verbose) {
-          const totalDuration = Date.now() - totalStartTime;
-          const retryInfo = attempt > 0 ? ` (succeeded on attempt ${attempt + 1})` : "";
-          console.log(`✓ GraphQL request completed in ${totalDuration}ms${retryInfo}:`, result);
-        }
+        const totalDuration = Date.now() - totalStartTime;
+        const retryInfo = attempt > 0 ? ` (succeeded on attempt ${attempt + 1})` : "";
+        this.logger.debug(`✓ GraphQL request completed in ${totalDuration}ms${retryInfo}`, result);
 
         return result;
       } catch (error: any) {
@@ -69,27 +68,18 @@ export class GraphQLClientWrapper {
 
         // Check if error is retryable
         if (!this.isRetryableError(error, config)) {
-          if (this.verbose) {
-            console.error(
-              `✗ GraphQL request failed with non-retryable error in ${duration}ms:`,
-              error,
-            );
-          } else {
-            console.error("GraphQL mutation failed (non-retryable):", error);
-          }
+          this.logger.error(
+            `✗ GraphQL request failed with non-retryable error in ${duration}ms`,
+            error,
+          );
           throw error;
         }
 
         // Calculate delay
         const delay = this.calculateDelay(attempt, config);
-
-        if (this.verbose) {
-          console.log(
-            `⏳ GraphQL request failed (attempt ${attempt + 1}/${
-              config.maxAttempts
-            }), retrying in ${delay}ms...`,
-          );
-        }
+        this.logger.debug(
+          `⏳ GraphQL request failed (attempt ${attempt + 1}/${config.maxAttempts}), retrying in ${delay}ms...`,
+        );
 
         // Wait before retry
         await this.sleep(delay);
@@ -97,15 +87,11 @@ export class GraphQLClientWrapper {
     }
 
     // All retries exhausted
-    if (this.verbose) {
-      const totalDuration = Date.now() - totalStartTime;
-      console.error(
-        `✗ GraphQL request failed after ${config.maxAttempts} attempts in ${totalDuration}ms:`,
-        lastError,
-      );
-    } else {
-      console.error(`GraphQL mutation failed after ${config.maxAttempts} attempts:`, lastError);
-    }
+    const totalDuration = Date.now() - totalStartTime;
+    this.logger.error(
+      `✗ GraphQL request failed after ${config.maxAttempts} attempts in ${totalDuration}ms`,
+      lastError,
+    );
 
     throw lastError;
   }

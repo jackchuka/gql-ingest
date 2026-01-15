@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import * as yaml from "js-yaml";
+import { Logger, noopLogger } from "./logger";
 
 export interface ParallelProcessingConfig {
   concurrency: number;
@@ -54,12 +55,12 @@ export const DEFAULT_CONFIG: ProcessingConfig = {
   entityDependencies: {},
 };
 
-export function loadConfig(configDir: string): ProcessingConfig {
+export function loadConfig(configDir: string, logger: Logger = noopLogger): ProcessingConfig {
   const configPath = path.join(configDir, "config.yaml");
 
   try {
     if (!fs.existsSync(configPath)) {
-      console.log("No config.yaml found, using default sequential processing");
+      logger.info("No config.yaml found, using default sequential processing");
       return DEFAULT_CONFIG;
     }
 
@@ -69,7 +70,7 @@ export function loadConfig(configDir: string): ProcessingConfig {
     return mergeWithDefaults(yamlConfig);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.warn(`Warning: Failed to parse config.yaml: ${errorMessage}. Using defaults.`);
+    logger.warn(`Warning: Failed to parse config.yaml: ${errorMessage}. Using defaults.`);
     return DEFAULT_CONFIG;
   }
 }
@@ -92,6 +93,7 @@ function mergeWithDefaults(yamlConfig: Partial<FullConfig>): ProcessingConfig {
 export function getEntityConfig(
   entityName: string,
   globalConfig: ProcessingConfig,
+  logger: Logger = noopLogger,
 ): ParallelProcessingConfig {
   const entityOverrides = globalConfig.entityConfig[entityName] || {};
 
@@ -102,7 +104,7 @@ export function getEntityConfig(
 
   // Apply constraint: preserveRowOrder forces concurrency = 1
   if (finalConfig.preserveRowOrder && finalConfig.concurrency > 1) {
-    console.warn(
+    logger.warn(
       `Entity '${entityName}': preserveRowOrder=true forces concurrency=1 (was ${finalConfig.concurrency})`,
     );
     finalConfig.concurrency = 1;

@@ -3,6 +3,7 @@ import path from "path";
 import { DataMapper } from "./mapper";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
+import { Logger } from "./logger";
 
 jest.mock("fs");
 jest.mock("./readers", () => ({
@@ -20,6 +21,7 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 describe("DataMapper", () => {
   let mockClient: jest.Mocked<GraphQLClientWrapper>;
   let mockMetrics: jest.Mocked<MetricsCollector>;
+  let mockLogger: jest.Mocked<Logger>;
   let dataMapper: DataMapper;
   let executeMutation: jest.Mock;
   let setHeaders: jest.Mock;
@@ -51,7 +53,14 @@ describe("DataMapper", () => {
       getMetrics,
     } as any;
 
-    dataMapper = new DataMapper(mockClient, testBasePath, mockMetrics);
+    mockLogger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+
+    dataMapper = new DataMapper(mockClient, testBasePath, mockMetrics, mockLogger);
   });
 
   afterEach(() => {
@@ -63,8 +72,6 @@ describe("DataMapper", () => {
       const mockFiles = ["users.json", "items.json", "orders.json"];
       mockFs.readdirSync.mockReturnValue(mockFiles as any);
 
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
-
       const result = dataMapper.discoverMappings("configs/test");
 
       expect(mockFs.readdirSync).toHaveBeenCalledWith(
@@ -75,11 +82,9 @@ describe("DataMapper", () => {
         "configs/test/mappings/orders.json",
         "configs/test/mappings/users.json",
       ]);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.info).toHaveBeenCalledWith(
         "Discovered 3 mapping files: items.json, orders.json, users.json",
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should filter only JSON files", () => {
@@ -99,17 +104,12 @@ describe("DataMapper", () => {
         throw new Error("Directory not found");
       });
 
-      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
-
       const result = dataMapper.discoverMappings("configs/nonexistent");
 
       expect(result).toEqual([]);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining("Error reading mappings directory"),
-        expect.any(Error),
       );
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -143,8 +143,6 @@ describe("DataMapper", () => {
         createUser: { id: "123" },
       });
 
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
-
       await dataMapper.processEntity("configs/test/mappings/users.json");
 
       expect(mockFs.readFileSync).toHaveBeenCalledWith(
@@ -177,8 +175,6 @@ describe("DataMapper", () => {
         },
         undefined,
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should handle GraphQL execution errors gracefully", async () => {
@@ -201,17 +197,13 @@ describe("DataMapper", () => {
 
       executeMutation.mockRejectedValue(new Error("GraphQL error"));
 
-      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
-
       await dataMapper.processEntity("configs/test/mappings/users.json");
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "✗ Failed to create entity for row 1:",
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        "✗ Failed to create entity for row 1",
         { user_name: "John" },
         expect.any(Error),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should map CSV columns to GraphQL variables correctly", async () => {
@@ -351,8 +343,6 @@ describe("DataMapper", () => {
 
       executeMutation.mockRejectedValue(new Error("GraphQL error"));
 
-      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
-
       await dataMapper.processEntity("configs/test/mappings/users.json");
 
       expect(startEntityProcessing).toHaveBeenCalledWith("users");
@@ -360,8 +350,6 @@ describe("DataMapper", () => {
       expect(recordFailure).toHaveBeenCalledWith("users");
       expect(finishEntityProcessing).toHaveBeenCalledWith("users");
       expect(recordSuccess).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
 
     it("should expose metrics through getMetrics method", () => {
@@ -461,8 +449,6 @@ describe("DataMapper", () => {
         createProduct: { id: "123" },
       });
 
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
       await dataMapper.processEntity("configs/test/mappings/products.json");
 
       expect(executeMutation).toHaveBeenCalledWith(
@@ -475,14 +461,12 @@ describe("DataMapper", () => {
         undefined,
       );
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         'Warning: Cannot convert "invalid_price" to Float for variable $price. Expected a valid number. Using original value.',
       );
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         'Warning: Cannot convert "invalid_quantity" to Int for variable $quantity. Expected a valid integer. Using original value.',
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should handle edge cases in numeric conversion safely", async () => {
@@ -525,8 +509,6 @@ describe("DataMapper", () => {
         createProduct: { id: "123" },
       });
 
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
       await dataMapper.processEntity("configs/test/mappings/products.json");
 
       // Should keep invalid values as strings
@@ -547,8 +529,6 @@ describe("DataMapper", () => {
         },
         undefined,
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should keep unknown scalar types as strings", async () => {
@@ -587,9 +567,7 @@ describe("DataMapper", () => {
         createProduct: { id: "123" },
       });
 
-      // Create verbose mapper to test the logging
-      const verboseMapper = new DataMapper(mockClient, testBasePath, mockMetrics, true);
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+      const verboseMapper = new DataMapper(mockClient, testBasePath, mockMetrics, mockLogger);
 
       await verboseMapper.processEntity("configs/test/mappings/products.json");
 
@@ -603,11 +581,9 @@ describe("DataMapper", () => {
         undefined,
       );
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         'Unknown GraphQL type "CustomScalar" for variable $custom_field. Keeping value as string.',
       );
-
-      consoleSpy.mockRestore();
     });
   });
 });

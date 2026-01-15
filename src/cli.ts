@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { GQLIngest } from "./gql-ingest";
+import { createDefaultLogger } from "./logger";
 
 const program = new Command();
 
@@ -21,7 +22,7 @@ program
     "Comma-separated list of specific entities to process (e.g., users,products)",
   )
   .option("-h, --headers <headers>", "JSON string of headers to include in requests")
-  .option("-v, --verbose", "Show detailed request results and responses")
+  .option("-q, --quiet", "Suppress logging output")
   .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
   .action(async (options) => {
     try {
@@ -34,14 +35,13 @@ program
       const client = new GQLIngest({
         endpoint: options.endpoint,
         headers: headers,
-        verbose: options.verbose,
+        logger: createDefaultLogger(!options.quiet),
         formatOverride: options.format,
       });
 
       // Perform ingestion
       const result = await client.ingest(options.config, {
         entities: options.entities,
-        verbose: options.verbose,
       });
 
       // Display metrics summary

@@ -1,11 +1,22 @@
 import fs from "fs";
 import { loadConfig, getEntityConfig, getRetryConfig, DEFAULT_CONFIG } from "./config";
+import { Logger } from "./logger";
 
 jest.mock("fs");
 const mockFs = fs as jest.Mocked<typeof fs>;
 
 describe("Configuration", () => {
   const testConfigDir = "/test/config";
+  let mockLogger: jest.Mocked<Logger>;
+
+  beforeEach(() => {
+    mockLogger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+  });
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -14,16 +25,13 @@ describe("Configuration", () => {
   describe("loadConfig", () => {
     it("should return default config when no config.yaml exists", () => {
       mockFs.existsSync.mockReturnValue(false);
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
 
-      const config = loadConfig(testConfigDir);
+      const config = loadConfig(testConfigDir, mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.info).toHaveBeenCalledWith(
         "No config.yaml found, using default sequential processing",
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should load and merge YAML configuration", () => {
@@ -77,16 +85,12 @@ entityConfig:
       mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue("invalid: yaml: content: [");
 
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
-      const config = loadConfig(testConfigDir);
+      const config = loadConfig(testConfigDir, mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining("Warning: Failed to parse config.yaml"),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should handle file read errors gracefully", () => {
@@ -95,16 +99,12 @@ entityConfig:
         throw new Error("File read error");
       });
 
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
-      const config = loadConfig(testConfigDir);
+      const config = loadConfig(testConfigDir, mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining("Warning: Failed to parse config.yaml"),
       );
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -149,17 +149,13 @@ entityConfig:
     });
 
     it("should apply preserveRowOrder constraint", () => {
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
-      const entityConfig = getEntityConfig("users", globalConfig);
+      const entityConfig = getEntityConfig("users", globalConfig, mockLogger);
 
       expect(entityConfig.concurrency).toBe(1); // forced to 1
       expect(entityConfig.preserveRowOrder).toBe(true);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         "Entity 'users': preserveRowOrder=true forces concurrency=1 (was 2)",
       );
-
-      consoleSpy.mockRestore();
     });
 
     it("should not apply constraint when concurrency is already 1", () => {
@@ -174,14 +170,10 @@ entityConfig:
         },
       };
 
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
-      const entityConfig = getEntityConfig("sequential", config);
+      const entityConfig = getEntityConfig("sequential", config, mockLogger);
 
       expect(entityConfig.concurrency).toBe(1);
-      expect(consoleSpy).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it("should not apply constraint when preserveRowOrder is false", () => {
@@ -196,14 +188,10 @@ entityConfig:
         },
       };
 
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
-
-      const entityConfig = getEntityConfig("bulk", config);
+      const entityConfig = getEntityConfig("bulk", config, mockLogger);
 
       expect(entityConfig.concurrency).toBe(50);
-      expect(consoleSpy).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
   });
 

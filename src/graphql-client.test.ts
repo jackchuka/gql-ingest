@@ -1,4 +1,5 @@
 import { GraphQLClientWrapper } from "./graphql-client";
+import { Logger } from "./logger";
 
 const mockRequest = jest.fn();
 const mockSetHeaders = jest.fn();
@@ -12,10 +13,22 @@ jest.mock("graphql-request", () => ({
 
 describe("GraphQLClientWrapper", () => {
   let clientWrapper: GraphQLClientWrapper;
+  let mockLogger: jest.Mocked<Logger>;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    clientWrapper = new GraphQLClientWrapper("https://api.example.com/graphql");
+    mockLogger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+    clientWrapper = new GraphQLClientWrapper(
+      "https://api.example.com/graphql",
+      undefined,
+      undefined,
+      mockLogger,
+    );
   });
 
   it("should create GraphQLClient with endpoint and default headers", () => {
@@ -51,15 +64,14 @@ describe("GraphQLClientWrapper", () => {
 
     mockRequest.mockRejectedValue(error);
 
-    const consoleSpy = jest.spyOn(console, "error").mockImplementation();
-
     await expect(clientWrapper.executeMutation(mutation, variables)).rejects.toThrow(
       "GraphQL error",
     );
 
-    expect(consoleSpy).toHaveBeenCalledWith("GraphQL mutation failed after 3 attempts:", error);
-
-    consoleSpy.mockRestore();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining("GraphQL request failed after 3 attempts"),
+      error,
+    );
   });
 
   it("should set headers on the client", () => {

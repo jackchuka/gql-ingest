@@ -2,6 +2,10 @@
 export { GQLIngest } from "./gql-ingest";
 export type { GQLIngestOptions, IngestOptions, IngestResult } from "./gql-ingest";
 
+// Logger exports
+export type { Logger } from "./logger";
+export { noopLogger, createConsoleLogger, createDefaultLogger } from "./logger";
+
 // Core components for advanced usage
 export { GraphQLClientWrapper } from "./graphql-client";
 export { DataMapper } from "./mapper";
