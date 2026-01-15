@@ -23,6 +23,9 @@ dependencies:
   js-yaml:
     specifier: ^4.1.0
     version: 4.1.1
+  zod:
+    specifier: ^4.3.5
+    version: 4.3.5
 
 devDependencies:
   '@types/jest':
@@ -3560,3 +3563,7 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
+
+  /zod@4.3.5:
+    resolution: {integrity: sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==}
+    dev: false

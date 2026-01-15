@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
+import * as yaml from "js-yaml";
 import { Logger } from "../../lib/logger";
-import { DEFAULT_RETRY_CONFIG, DEFAULT_PARALLEL_CONFIG } from "../../lib/config";
+import { CONFIG_TEMPLATE } from "../../lib/config-schema";
 
 export type DataFormat = "csv" | "json" | "yaml" | "jsonl";
 
@@ -29,6 +30,62 @@ export async function generateExampleEntity(
   );
 }
 
+function getDesc(schema: { description?: string }): string | undefined {
+  return schema.description;
+}
+
+function toCommentedYaml(obj: Record<string, unknown>): string[] {
+  return yaml
+    .dump(obj, { flowLevel: 2 })
+    .trimEnd()
+    .split("\n")
+    .map((line) => `# ${line}`);
+}
+
+function generateConfigYamlContent(): string {
+  const { schema, defaults, examples } = CONFIG_TEMPLATE;
+  const lines: string[] = ["# gql-ingest configuration", ""];
+
+  // parallelProcessing section
+  lines.push("parallelProcessing:");
+  for (const [key, fieldSchema] of Object.entries(schema.parallelProcessing.shape)) {
+    const desc = getDesc(fieldSchema);
+    if (desc) lines.push(`  # ${desc}`);
+    lines.push(
+      `  ${key}: ${defaults.parallelProcessing[key as keyof typeof defaults.parallelProcessing]}`,
+    );
+  }
+  lines.push("");
+
+  // retry section
+  lines.push("retry:");
+  for (const [key, fieldSchema] of Object.entries(schema.retry.shape)) {
+    const desc = getDesc(fieldSchema);
+    if (desc) lines.push(`  # ${desc}`);
+    const value = defaults.retry[key as keyof typeof defaults.retry];
+    lines.push(`  ${key}: ${Array.isArray(value) ? `[${value.join(", ")}]` : value}`);
+  }
+  lines.push("");
+
+  // entityConfig section
+  const entityConfigDesc = getDesc(schema.entityConfig);
+  if (entityConfigDesc) lines.push(`# ${entityConfigDesc}`);
+  lines.push("# Example:");
+  lines.push(...toCommentedYaml({ entityConfig: examples.entityConfig }));
+  lines.push("entityConfig: {}");
+  lines.push("");
+
+  // entityDependencies section
+  const entityDepsDesc = getDesc(schema.entityDependencies);
+  if (entityDepsDesc) lines.push(`# ${entityDepsDesc}`);
+  lines.push("# Example:");
+  lines.push(...toCommentedYaml({ entityDependencies: examples.entityDependencies }));
+  lines.push("entityDependencies: {}");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
 export async function generateConfigYaml(
   basePath: string,
   force: boolean,
@@ -41,24 +98,7 @@ export async function generateConfigYaml(
     return;
   }
 
-  const content = `# gql-ingest configuration
-# See documentation for full options
-
-parallelProcessing:
-  concurrency: ${DEFAULT_PARALLEL_CONFIG.concurrency}
-  entityConcurrency: ${DEFAULT_PARALLEL_CONFIG.entityConcurrency}
-  preserveRowOrder: ${DEFAULT_PARALLEL_CONFIG.preserveRowOrder}
-
-retry:
-  maxAttempts: ${DEFAULT_RETRY_CONFIG.maxAttempts}
-  baseDelay: ${DEFAULT_RETRY_CONFIG.baseDelay}
-  maxDelay: ${DEFAULT_RETRY_CONFIG.maxDelay}
-  exponentialBackoff: ${DEFAULT_RETRY_CONFIG.exponentialBackoff}
-
-entityConfig: {}
-entityDependencies: {}
-`;
-
+  const content = generateConfigYamlContent();
   fs.writeFileSync(configPath, content, "utf-8");
   logger.info("Created config.yaml");
 }

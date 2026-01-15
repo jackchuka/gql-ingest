@@ -2,60 +2,26 @@ import fs from "fs";
 import path from "path";
 import * as yaml from "js-yaml";
 import { Logger, noopLogger } from "./logger";
+import {
+  DEFAULT_RETRY_CONFIG,
+  DEFAULT_PARALLEL_CONFIG,
+  type Config,
+  type ParallelProcessingConfig,
+  type RetryConfig,
+} from "./config-schema";
 
-export interface ParallelProcessingConfig {
-  concurrency: number;
-  entityConcurrency: number;
-  preserveRowOrder: boolean;
-}
+export type { Config, ParallelProcessingConfig, RetryConfig, EntityConfig } from "./config-schema";
 
-export interface RetryConfig {
-  maxAttempts: number;
-  baseDelay: number;
-  maxDelay: number;
-  exponentialBackoff: boolean;
-  retryableStatusCodes: number[];
-}
+export { DEFAULT_RETRY_CONFIG, DEFAULT_PARALLEL_CONFIG } from "./config-schema";
 
-export interface EntityConfig {
-  concurrency?: number;
-  preserveRowOrder?: boolean;
-  retry?: Partial<RetryConfig>;
-}
-
-export interface ProcessingConfig {
-  retry: RetryConfig;
-  parallelProcessing: ParallelProcessingConfig;
-  entityConfig: Record<string, EntityConfig>;
-  entityDependencies: Record<string, string[]>;
-}
-
-export interface FullConfig extends ProcessingConfig {
-  // Future: additional config sections can be added here
-}
-
-export const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxAttempts: 3,
-  baseDelay: 1000,
-  maxDelay: 30000,
-  exponentialBackoff: true,
-  retryableStatusCodes: [408, 429, 500, 502, 503, 504],
-};
-
-export const DEFAULT_PARALLEL_CONFIG: ParallelProcessingConfig = {
-  concurrency: 1,
-  entityConcurrency: 1,
-  preserveRowOrder: true,
-};
-
-export const DEFAULT_CONFIG: ProcessingConfig = {
+export const DEFAULT_CONFIG: Config = {
   retry: DEFAULT_RETRY_CONFIG,
   parallelProcessing: DEFAULT_PARALLEL_CONFIG,
   entityConfig: {},
   entityDependencies: {},
 };
 
-export function loadConfig(configDir: string, logger: Logger = noopLogger): ProcessingConfig {
+export function loadConfig(configDir: string, logger: Logger = noopLogger): Config {
   const configPath = path.join(configDir, "config.yaml");
 
   try {
@@ -65,7 +31,7 @@ export function loadConfig(configDir: string, logger: Logger = noopLogger): Proc
     }
 
     const fileContents = fs.readFileSync(configPath, "utf8");
-    const yamlConfig = yaml.load(fileContents) as Partial<FullConfig>;
+    const yamlConfig = yaml.load(fileContents) as Partial<Config>;
 
     return mergeWithDefaults(yamlConfig);
   } catch (error) {
@@ -75,7 +41,7 @@ export function loadConfig(configDir: string, logger: Logger = noopLogger): Proc
   }
 }
 
-function mergeWithDefaults(yamlConfig: Partial<FullConfig>): ProcessingConfig {
+function mergeWithDefaults(yamlConfig: Partial<Config>): Config {
   return {
     retry: {
       ...DEFAULT_RETRY_CONFIG,
@@ -92,7 +58,7 @@ function mergeWithDefaults(yamlConfig: Partial<FullConfig>): ProcessingConfig {
 
 export function getEntityConfig(
   entityName: string,
-  globalConfig: ProcessingConfig,
+  globalConfig: Config,
   logger: Logger = noopLogger,
 ): ParallelProcessingConfig {
   const entityOverrides = globalConfig.entityConfig[entityName] || {};
@@ -113,7 +79,7 @@ export function getEntityConfig(
   return finalConfig;
 }
 
-export function getRetryConfig(entityName: string, globalConfig: ProcessingConfig): RetryConfig {
+export function getRetryConfig(entityName: string, globalConfig: Config): RetryConfig {
   const entityOverrides = globalConfig.entityConfig[entityName]?.retry || {};
 
   return {
