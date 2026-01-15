@@ -1,29 +1,31 @@
 import { GraphQLClient } from "graphql-request";
 import { MetricsCollector } from "./metrics";
 import { DEFAULT_RETRY_CONFIG, RetryConfig } from "./config";
+import { Logger, noopLogger } from "./logger";
 
 export class GraphQLClientWrapper {
   private client: GraphQLClient;
   private metrics?: MetricsCollector;
-  private verbose: boolean;
+  private logger: Logger;
 
   constructor(
     endpoint: string,
     headers?: Record<string, string>,
     metrics?: MetricsCollector,
-    verbose: boolean = false,
+    logger: Logger = noopLogger,
   ) {
     this.client = new GraphQLClient(endpoint, {
       headers: headers || {},
     });
     this.metrics = metrics;
-    this.verbose = verbose;
+    this.logger = logger;
   }
 
   async executeMutation(
     mutation: string,
     variables: Record<string, any>,
     retryConfig?: RetryConfig,
+    signal?: AbortSignal,
   ): Promise<any> {
     const config = retryConfig || DEFAULT_RETRY_CONFIG;
 
@@ -31,6 +33,11 @@ export class GraphQLClientWrapper {
     const totalStartTime = Date.now();
 
     for (let attempt = 0; attempt < config.maxAttempts; attempt++) {
+      // Check for abort before each attempt
+      if (signal?.aborted) {
+        throw new Error(`Request aborted: ${signal.reason || "cancelled"}`);
+      }
+
       const attemptStartTime = Date.now();
 
       try {
@@ -44,11 +51,9 @@ export class GraphQLClientWrapper {
           }
         }
 
-        if (this.verbose) {
-          const totalDuration = Date.now() - totalStartTime;
-          const retryInfo = attempt > 0 ? ` (succeeded on attempt ${attempt + 1})` : "";
-          console.log(`✓ GraphQL request completed in ${totalDuration}ms${retryInfo}:`, result);
-        }
+        const totalDuration = Date.now() - totalStartTime;
+        const retryInfo = attempt > 0 ? ` (succeeded on attempt ${attempt + 1})` : "";
+        this.logger.debug(`✓ GraphQL request completed in ${totalDuration}ms${retryInfo}`, result);
 
         return result;
       } catch (error: any) {
@@ -69,43 +74,30 @@ export class GraphQLClientWrapper {
 
         // Check if error is retryable
         if (!this.isRetryableError(error, config)) {
-          if (this.verbose) {
-            console.error(
-              `✗ GraphQL request failed with non-retryable error in ${duration}ms:`,
-              error,
-            );
-          } else {
-            console.error("GraphQL mutation failed (non-retryable):", error);
-          }
+          this.logger.error(
+            `✗ GraphQL request failed with non-retryable error in ${duration}ms`,
+            error,
+          );
           throw error;
         }
 
         // Calculate delay
         const delay = this.calculateDelay(attempt, config);
+        this.logger.debug(
+          `⏳ GraphQL request failed (attempt ${attempt + 1}/${config.maxAttempts}), retrying in ${delay}ms...`,
+        );
 
-        if (this.verbose) {
-          console.log(
-            `⏳ GraphQL request failed (attempt ${attempt + 1}/${
-              config.maxAttempts
-            }), retrying in ${delay}ms...`,
-          );
-        }
-
-        // Wait before retry
-        await this.sleep(delay);
+        // Wait before retry (interruptible by abort signal)
+        await this.sleepWithSignal(delay, signal);
       }
     }
 
     // All retries exhausted
-    if (this.verbose) {
-      const totalDuration = Date.now() - totalStartTime;
-      console.error(
-        `✗ GraphQL request failed after ${config.maxAttempts} attempts in ${totalDuration}ms:`,
-        lastError,
-      );
-    } else {
-      console.error(`GraphQL mutation failed after ${config.maxAttempts} attempts:`, lastError);
-    }
+    const totalDuration = Date.now() - totalStartTime;
+    this.logger.error(
+      `✗ GraphQL request failed after ${config.maxAttempts} attempts in ${totalDuration}ms`,
+      lastError,
+    );
 
     throw lastError;
   }
@@ -134,8 +126,26 @@ export class GraphQLClientWrapper {
     return Math.max(0, cappedDelay + jitter);
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /**
+   * Sleep that can be interrupted by abort signal
+   */
+  private sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error(`Request aborted: ${signal.reason || "cancelled"}`));
+        return;
+      }
+
+      const timeoutId = setTimeout(resolve, ms);
+
+      if (signal) {
+        const abortHandler = () => {
+          clearTimeout(timeoutId);
+          reject(new Error(`Request aborted: ${signal.reason || "cancelled"}`));
+        };
+        signal.addEventListener("abort", abortHandler, { once: true });
+      }
+    });
   }
 
   setHeaders(headers: Record<string, string>) {

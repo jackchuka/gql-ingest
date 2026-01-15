@@ -1,16 +1,23 @@
 export interface EntityMetrics {
-  entityName: string;
-  successCount: number;
-  failureCount: number;
-  startTime: number;
-  endTime?: number;
+  rowsProcessed: number;
+  successfulRows: number;
+  failedRows: number;
+  duration: number;
 }
 
 export interface ProcessingMetrics {
+  totalRows: number;
+  successfulOperations: number;
+  failedOperations: number;
+  totalDuration: number;
+  entities: Record<string, EntityMetrics>;
+}
+
+export interface InternalMetrics {
   totalEntities: number;
   totalSuccesses: number;
   totalFailures: number;
-  entityMetrics: Map<string, EntityMetrics>;
+  entityMetrics: Map<string, InternalEntityMetrics>;
   requestDurations: number[];
   retryAttempts: number;
   retrySuccesses: number;
@@ -19,8 +26,16 @@ export interface ProcessingMetrics {
   endTime?: number;
 }
 
+export interface InternalEntityMetrics {
+  entityName: string;
+  successCount: number;
+  failureCount: number;
+  startTime: number;
+  endTime?: number;
+}
+
 export class MetricsCollector {
-  private metrics: ProcessingMetrics;
+  private metrics: InternalMetrics;
 
   constructor() {
     this.metrics = {
@@ -72,13 +87,37 @@ export class MetricsCollector {
     }
   }
 
-  finishProcessing(): ProcessingMetrics {
+  finishProcessing(): InternalMetrics {
     this.metrics.endTime = Date.now();
     return { ...this.metrics };
   }
 
-  getEntityMetrics(entityName: string): EntityMetrics | undefined {
+  getEntityMetrics(entityName: string): InternalEntityMetrics | undefined {
     return this.metrics.entityMetrics.get(entityName);
+  }
+
+  getMetrics(): ProcessingMetrics {
+    const endTime = this.metrics.endTime || Date.now();
+    const totalDuration = endTime - this.metrics.startTime;
+
+    const entities: Record<string, EntityMetrics> = {};
+    for (const [name, metrics] of this.metrics.entityMetrics) {
+      const entityEndTime = metrics.endTime || Date.now();
+      entities[name] = {
+        rowsProcessed: metrics.successCount + metrics.failureCount,
+        successfulRows: metrics.successCount,
+        failedRows: metrics.failureCount,
+        duration: entityEndTime - metrics.startTime,
+      };
+    }
+
+    return {
+      totalRows: this.metrics.totalEntities,
+      successfulOperations: this.metrics.totalSuccesses,
+      failedOperations: this.metrics.totalFailures,
+      totalDuration,
+      entities,
+    };
   }
 
   getTotalProcessed(): number {

@@ -1,6 +1,6 @@
 {
   "name": "@jackchuka/gql-ingest",
-  "version": "2.2.2",
+  "version": "3.0.0",
   "description": "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   "keywords": [
     "api",
@@ -16,13 +16,20 @@
     "url": "https://github.com/jackchuka/gql-ingest.git"
   },
   "bin": {
-    "gql-ingest": "dist/cli.js"
+    "gql-ingest": "dist/cli/index.js"
   },
   "files": [
     "dist"
   ],
   "type": "module",
-  "main": "dist/cli.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "lint": "oxlint --type-aware --tsconfig ./tsconfig.json",
     "lint:fix": "oxlint --fix --type-aware --tsconfig ./tsconfig.json",
@@ -30,7 +37,7 @@
     "build": "node esbuild.config.js",
     "build:types": "tsc --emitDeclarationOnly",
     "build:all": "pnpm run build && pnpm run build:types",
-    "dev": "ts-node src/cli.ts",
+    "dev": "ts-node src/cli/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "prepublishOnly": "pnpm run build:all"
@@ -54,6 +61,9 @@
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "packageManager": "pnpm@8.14.1"
 }

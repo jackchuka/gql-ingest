@@ -1,15 +1,17 @@
 import fs from "fs";
 import path from "path";
-import { readCsvFile } from "./csv";
+import { CsvReader } from "./csv";
 
-describe("CSV Reader", () => {
+describe("CsvReader", () => {
   const testDataDir = path.join(__dirname, "test-data");
   const testCsvPath = path.join(testDataDir, "test.csv");
+  let reader: CsvReader;
 
   beforeAll(() => {
     if (!fs.existsSync(testDataDir)) {
       fs.mkdirSync(testDataDir, { recursive: true });
     }
+    reader = new CsvReader();
   });
 
   afterAll(() => {
@@ -24,11 +26,15 @@ describe("CSV Reader", () => {
     }
   });
 
+  it("should return correct supported extensions", () => {
+    expect(reader.getSupportedExtensions()).toEqual(["csv"]);
+  });
+
   it("should read a simple CSV file", async () => {
     const csvContent = "name,age\nJohn,30\nJane,25";
     fs.writeFileSync(testCsvPath, csvContent);
 
-    const result = await readCsvFile(testCsvPath);
+    const result = await reader.readFile(testCsvPath);
 
     expect(result).toEqual([
       { name: "John", age: "30" },
@@ -41,7 +47,7 @@ describe("CSV Reader", () => {
       'name,description\n"John Doe","A person with, comma"\n"Jane\'s Data","Quote test"';
     fs.writeFileSync(testCsvPath, csvContent);
 
-    const result = await readCsvFile(testCsvPath);
+    const result = await reader.readFile(testCsvPath);
 
     expect(result).toEqual([
       { name: "John Doe", description: "A person with, comma" },
@@ -53,7 +59,7 @@ describe("CSV Reader", () => {
     const csvContent = "name,age\n";
     fs.writeFileSync(testCsvPath, csvContent);
 
-    const result = await readCsvFile(testCsvPath);
+    const result = await reader.readFile(testCsvPath);
 
     expect(result).toEqual([]);
   });
@@ -62,7 +68,7 @@ describe("CSV Reader", () => {
     const csvContent = "name,age";
     fs.writeFileSync(testCsvPath, csvContent);
 
-    const result = await readCsvFile(testCsvPath);
+    const result = await reader.readFile(testCsvPath);
 
     expect(result).toEqual([]);
   });
@@ -71,7 +77,7 @@ describe("CSV Reader", () => {
     const csvContent = "name,age,city\nJohn,30,\nJane,,Boston\n,25,NYC";
     fs.writeFileSync(testCsvPath, csvContent);
 
-    const result = await readCsvFile(testCsvPath);
+    const result = await reader.readFile(testCsvPath);
 
     expect(result).toEqual([
       { name: "John", age: "30", city: "" },

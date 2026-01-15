@@ -1,10 +1,17 @@
 import fs from "fs";
 import path from "path";
 import { parse, DocumentNode, VariableDefinitionNode } from "graphql";
-import { DataReaderFactory, DataRow } from "./readers";
+import { DataReaderFactory, DataRow } from "../readers";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
 import { ParallelProcessingConfig, RetryConfig } from "./config";
+import { Logger, noopLogger } from "./logger";
+import {
+  EntityStartEventPayload,
+  EntityCompleteEventPayload,
+  RowSuccessEventPayload,
+  RowFailureEventPayload,
+} from "./events";
 
 export interface MappingConfig {
   // Legacy CSV support
@@ -16,24 +23,34 @@ export interface MappingConfig {
   mapping: Record<string, unknown>;
 }
 
+/**
+ * Callbacks for entity processing events
+ */
+export interface EntityProcessingCallbacks {
+  onEntityStart?: (payload: Omit<EntityStartEventPayload, "waveIndex">) => void;
+  onEntityComplete?: (payload: EntityCompleteEventPayload) => void;
+  onRowSuccess?: (payload: RowSuccessEventPayload) => void;
+  onRowFailure?: (payload: RowFailureEventPayload) => void;
+}
+
 export class DataMapper {
   private client: GraphQLClientWrapper;
   private basePath: string;
   private metrics: MetricsCollector;
-  private verbose: boolean;
+  private logger: Logger;
   private formatOverride?: string;
 
   constructor(
     client: GraphQLClientWrapper,
     basePath: string = process.cwd(),
     metrics?: MetricsCollector,
-    verbose: boolean = false,
+    logger: Logger = noopLogger,
     formatOverride?: string,
   ) {
     this.client = client;
     this.basePath = basePath;
     this.metrics = metrics || new MetricsCollector();
-    this.verbose = verbose;
+    this.logger = logger;
     this.formatOverride = formatOverride;
   }
 
@@ -61,7 +78,7 @@ export class DataMapper {
         // Check for requested entities that were not found
         const notFound = entityFilter.filter((e) => !foundEntities.has(e));
         if (notFound.length > 0) {
-          console.warn(
+          this.logger.warn(
             `Warning: The following entities were not found in mappings: ${notFound.join(", ")}`,
           );
         }
@@ -69,22 +86,40 @@ export class DataMapper {
 
       jsonFiles.sort(); // Alphabetical order for consistent processing
 
-      console.log(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
+      this.logger.info(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
       return jsonFiles.map((file) => path.join(configDir, "mappings", file));
     } catch (error) {
-      console.error(`Error reading mappings directory ${mappingsPath}:`, error);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error reading mappings directory ${mappingsPath}: ${message}`);
       return [];
     }
   }
 
+  /**
+   * Process an entity (backward-compatible method)
+   */
   async processEntity(
     configPath: string,
     parallelConfig?: ParallelProcessingConfig,
     retryConfig?: RetryConfig,
   ): Promise<void> {
-    const entityName = path.basename(configPath, ".json");
-    console.log(`Processing entity: ${configPath}`);
+    return this.processEntityWithEvents(configPath, parallelConfig, retryConfig);
+  }
 
+  /**
+   * Process an entity with event callbacks and abort support
+   */
+  async processEntityWithEvents(
+    configPath: string,
+    parallelConfig?: ParallelProcessingConfig,
+    retryConfig?: RetryConfig,
+    signal?: AbortSignal,
+    callbacks?: EntityProcessingCallbacks,
+  ): Promise<void> {
+    const entityName = path.basename(configPath, ".json");
+    const entityStartTime = Date.now();
+
+    this.logger.info(`Processing entity: ${configPath}`);
     this.metrics.startEntityProcessing(entityName);
 
     // Read mapping configuration
@@ -111,68 +146,139 @@ export class DataMapper {
     const graphqlPath = path.resolve(configDir, config.graphqlFile);
     const mutation = fs.readFileSync(graphqlPath, "utf8");
 
+    // Emit entityStart event
+    callbacks?.onEntityStart?.({
+      entityName,
+      mappingPath: configPath,
+      totalRows: data.length,
+    });
+
     // Process rows with optional parallelization
     if (parallelConfig && parallelConfig.concurrency > 1) {
-      await this.processRowsConcurrently(
+      await this.processRowsConcurrentlyWithEvents(
         data,
         mutation,
         config.mapping,
         entityName,
         parallelConfig,
         retryConfig,
+        signal,
+        callbacks,
       );
     } else {
-      await this.processRowsSequentially(data, mutation, config.mapping, entityName, retryConfig);
+      await this.processRowsSequentiallyWithEvents(
+        data,
+        mutation,
+        config.mapping,
+        entityName,
+        retryConfig,
+        signal,
+        callbacks,
+      );
     }
 
     this.metrics.finishEntityProcessing(entityName);
+
+    // Emit entityComplete event - convert internal metrics to EntityMetrics format
+    const internalMetrics = this.metrics.getEntityMetrics(entityName);
+    const duration = Date.now() - entityStartTime;
+    const entityMetrics = internalMetrics
+      ? {
+          rowsProcessed: internalMetrics.successCount + internalMetrics.failureCount,
+          successfulRows: internalMetrics.successCount,
+          failedRows: internalMetrics.failureCount,
+          duration,
+        }
+      : {
+          rowsProcessed: 0,
+          successfulRows: 0,
+          failedRows: 0,
+          duration,
+        };
+
+    callbacks?.onEntityComplete?.({
+      entityName,
+      metrics: entityMetrics,
+      success: entityMetrics.failedRows === 0,
+      durationMs: duration,
+    });
   }
 
-  private async processRowsSequentially(
+  private async processRowsSequentiallyWithEvents(
     data: DataRow[],
     mutation: string,
     mapping: Record<string, unknown>,
     entityName: string,
     retryConfig?: RetryConfig,
+    signal?: AbortSignal,
+    callbacks?: EntityProcessingCallbacks,
   ): Promise<void> {
     const totalRows = data.length;
     const variableTypes = this.extractVariableTypes(mutation);
 
     for (let i = 0; i < data.length; i++) {
+      // Check for abort signal
+      if (signal?.aborted) {
+        this.logger.info(`Processing cancelled at row ${i + 1}/${totalRows}`);
+        return;
+      }
+
       const row = data[i];
       const variables = this.mapRowToVariables(row, mapping, variableTypes);
+      const rowStartTime = Date.now();
 
       try {
-        await this.client.executeMutation(mutation, variables, retryConfig);
+        const result = await this.client.executeMutation(mutation, variables, retryConfig, signal);
         this.metrics.recordSuccess(entityName);
 
-        // Show progress every 10% or at the end (only in non-verbose mode)
-        if (
-          !this.verbose &&
-          ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1)
-        ) {
+        // Emit row success event
+        callbacks?.onRowSuccess?.({
+          entityName,
+          rowIndex: i,
+          row,
+          result,
+          durationMs: Date.now() - rowStartTime,
+        });
+
+        // Show progress every 10% or at the end
+        if ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1) {
           const progress = (((i + 1) / totalRows) * 100).toFixed(1);
-          console.log(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
+          this.logger.info(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
         }
       } catch (error) {
-        this.metrics.recordFailure(entityName);
-        if (!this.verbose) {
-          console.error(`✗ Failed to create entity for row ${i + 1}:`, row, error);
+        // Check if error is due to abort
+        if (signal?.aborted) {
+          this.logger.info(`Processing cancelled at row ${i + 1}/${totalRows}`);
+          return;
         }
+
+        this.metrics.recordFailure(entityName);
+        this.logger.error(`✗ Failed to create entity for row ${i + 1}`, row, error);
+
+        // Emit row failure event
+        callbacks?.onRowFailure?.({
+          entityName,
+          rowIndex: i,
+          row,
+          error: error instanceof Error ? error : new Error(String(error)),
+          retryAttempts: retryConfig?.maxAttempts ?? 3,
+        });
       }
     }
   }
 
-  private async processRowsConcurrently(
+  private async processRowsConcurrentlyWithEvents(
     data: DataRow[],
     mutation: string,
     mapping: Record<string, unknown>,
     entityName: string,
     parallelConfig: ParallelProcessingConfig,
     retryConfig?: RetryConfig,
+    signal?: AbortSignal,
+    callbacks?: EntityProcessingCallbacks,
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
-    console.log(`Processing ${data.length} rows with concurrency: ${concurrency}`);
+    this.logger.info(`Processing ${data.length} rows with concurrency: ${concurrency}`);
 
     // Extract variable types once for all rows
     const variableTypes = this.extractVariableTypes(mutation);
@@ -183,22 +289,63 @@ export class DataMapper {
     const totalRows = data.length;
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      // Check for abort signal before each chunk
+      if (signal?.aborted) {
+        this.logger.info(`Processing cancelled at chunk ${chunkIndex + 1}/${chunks.length}`);
+        return;
+      }
+
       const chunk = chunks[chunkIndex];
-      const promises = chunk.map(async (row) => {
+      const chunkStartIndex = chunkIndex * concurrency;
+
+      const promises = chunk.map(async (row, index) => {
+        const rowIndex = chunkStartIndex + index;
         const variables = this.mapRowToVariables(row, mapping, variableTypes);
+        const rowStartTime = Date.now();
 
         try {
-          const result = await this.client.executeMutation(mutation, variables, retryConfig);
+          const result = await this.client.executeMutation(
+            mutation,
+            variables,
+            retryConfig,
+            signal,
+          );
           this.metrics.recordSuccess(entityName);
-          return { success: true, result, row };
+
+          // Emit row success event
+          callbacks?.onRowSuccess?.({
+            entityName,
+            rowIndex,
+            row,
+            result,
+            durationMs: Date.now() - rowStartTime,
+          });
+
+          return { success: true, result, row, rowIndex };
         } catch (error) {
           this.metrics.recordFailure(entityName);
-          return { success: false, error, row };
+
+          // Emit row failure event
+          callbacks?.onRowFailure?.({
+            entityName,
+            rowIndex,
+            row,
+            error: error instanceof Error ? error : new Error(String(error)),
+            retryAttempts: retryConfig?.maxAttempts ?? 3,
+          });
+
+          return { success: false, error, row, rowIndex };
         }
       });
 
       const results = await Promise.allSettled(promises);
       processedCount += chunk.length;
+
+      // Check if cancelled during chunk processing
+      if (signal?.aborted) {
+        this.logger.info(`Processing cancelled after chunk ${chunkIndex + 1}/${chunks.length}`);
+        return;
+      }
 
       // Count successes and failures in this chunk
       let chunkSuccesses = 0;
@@ -211,27 +358,21 @@ export class DataMapper {
             chunkSuccesses++;
           } else {
             chunkFailures++;
-            if (!this.verbose) {
-              console.error(`✗ Failed to create entity for row:`, row, error);
-            }
+            this.logger.error(`✗ Failed to create entity for row`, row, error);
           }
         } else {
           chunkFailures++;
-          if (!this.verbose) {
-            console.error(`✗ Promise rejected:`, result.reason);
-          }
+          this.logger.error(`✗ Promise rejected: ${result.reason}`);
         }
       });
 
-      // Show progress update (only in non-verbose mode)
-      if (!this.verbose) {
-        const progress = ((processedCount / totalRows) * 100).toFixed(1);
-        console.log(
-          `📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${
-            chunkIndex + 1
-          }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`,
-        );
-      }
+      // Show progress update
+      const progress = ((processedCount / totalRows) * 100).toFixed(1);
+      this.logger.info(
+        `📊 Progress: ${processedCount}/${totalRows} (${progress}%) - Chunk ${
+          chunkIndex + 1
+        }: ${chunkSuccesses} ✓, ${chunkFailures} ✗`,
+      );
     }
   }
 
@@ -350,7 +491,8 @@ export class DataMapper {
         }
       }
     } catch (error) {
-      console.error("Error parsing GraphQL mutation:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error parsing GraphQL mutation: ${message}`);
     }
 
     return types;
@@ -390,7 +532,7 @@ export class DataMapper {
         const intValue = Number(trimmedValue);
         // Validate that it's a valid integer (no decimals, NaN, or Infinity)
         if (isNaN(intValue) || !isFinite(intValue) || !Number.isInteger(intValue)) {
-          console.warn(
+          this.logger.warn(
             `Warning: Cannot convert "${value}" to Int for variable $${varName}. Expected a valid integer. Using original value.`,
           );
           return value;
@@ -401,7 +543,7 @@ export class DataMapper {
         const floatValue = Number(trimmedValue);
         // Number() is more strict than parseFloat() - it requires the entire string to be valid
         if (isNaN(floatValue) || !isFinite(floatValue)) {
-          console.warn(
+          this.logger.warn(
             `Warning: Cannot convert "${value}" to Float for variable $${varName}. Expected a valid number. Using original value.`,
           );
           return value;
@@ -412,7 +554,7 @@ export class DataMapper {
         const lowerValue = trimmedValue.toLowerCase();
         if (lowerValue === "true" || lowerValue === "1") return true;
         if (lowerValue === "false" || lowerValue === "0") return false;
-        console.warn(
+        this.logger.warn(
           `Warning: Cannot convert "${value}" to Boolean for variable $${varName}. Expected "true", "false", "1", or "0". Using original value.`,
         );
         return value;
@@ -422,11 +564,9 @@ export class DataMapper {
 
       default:
         // Unknown scalar type - keep as string for safety
-        if (this.verbose) {
-          console.log(
-            `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`,
-          );
-        }
+        this.logger.debug(
+          `Unknown GraphQL type "${type}" for variable $${varName}. Keeping value as string.`,
+        );
         return value;
     }
   }
