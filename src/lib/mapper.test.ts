@@ -51,6 +51,12 @@ describe("DataMapper", () => {
       recordFailure,
       finishEntityProcessing,
       getMetrics,
+      getEntityMetrics: jest.fn().mockReturnValue({
+        entityName: "test",
+        successCount: 0,
+        failureCount: 0,
+        startTime: Date.now(),
+      }),
     } as any;
 
     mockLogger = {
@@ -166,6 +172,7 @@ describe("DataMapper", () => {
           email: "john@example.com",
         },
         undefined,
+        undefined,
       );
       expect(executeMutation).toHaveBeenCalledWith(
         mockMutation,
@@ -173,6 +180,7 @@ describe("DataMapper", () => {
           name: "Jane",
           email: "jane@example.com",
         },
+        undefined,
         undefined,
       );
     });
@@ -250,6 +258,7 @@ describe("DataMapper", () => {
           sku: "W001",
         },
         undefined,
+        undefined,
       );
     });
 
@@ -288,6 +297,7 @@ describe("DataMapper", () => {
           name: "John",
           email: "john@example.com",
         },
+        undefined,
         undefined,
       );
     });
@@ -408,6 +418,7 @@ describe("DataMapper", () => {
           active: true,
         },
         undefined,
+        undefined,
       );
     });
 
@@ -458,6 +469,7 @@ describe("DataMapper", () => {
           price: "invalid_price",
           quantity: "invalid_quantity",
         },
+        undefined,
         undefined,
       );
 
@@ -519,6 +531,7 @@ describe("DataMapper", () => {
           float_field: "Infinity",
         },
         undefined,
+        undefined,
       );
 
       expect(executeMutation).toHaveBeenCalledWith(
@@ -527,6 +540,7 @@ describe("DataMapper", () => {
           int_field: "not_a_number",
           float_field: "1.2.3",
         },
+        undefined,
         undefined,
       );
     });
@@ -578,6 +592,7 @@ describe("DataMapper", () => {
           name: "Widget",
           custom_field: "123",
         },
+        undefined,
         undefined,
       );
 

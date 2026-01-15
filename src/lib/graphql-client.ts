@@ -25,6 +25,7 @@ export class GraphQLClientWrapper {
     mutation: string,
     variables: Record<string, any>,
     retryConfig?: RetryConfig,
+    signal?: AbortSignal,
   ): Promise<any> {
     const config = retryConfig || DEFAULT_RETRY_CONFIG;
 
@@ -32,6 +33,11 @@ export class GraphQLClientWrapper {
     const totalStartTime = Date.now();
 
     for (let attempt = 0; attempt < config.maxAttempts; attempt++) {
+      // Check for abort before each attempt
+      if (signal?.aborted) {
+        throw new Error(`Request aborted: ${signal.reason || "cancelled"}`);
+      }
+
       const attemptStartTime = Date.now();
 
       try {
@@ -81,8 +87,8 @@ export class GraphQLClientWrapper {
           `⏳ GraphQL request failed (attempt ${attempt + 1}/${config.maxAttempts}), retrying in ${delay}ms...`,
         );
 
-        // Wait before retry
-        await this.sleep(delay);
+        // Wait before retry (interruptible by abort signal)
+        await this.sleepWithSignal(delay, signal);
       }
     }
 
@@ -120,8 +126,26 @@ export class GraphQLClientWrapper {
     return Math.max(0, cappedDelay + jitter);
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /**
+   * Sleep that can be interrupted by abort signal
+   */
+  private sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error(`Request aborted: ${signal.reason || "cancelled"}`));
+        return;
+      }
+
+      const timeoutId = setTimeout(resolve, ms);
+
+      if (signal) {
+        const abortHandler = () => {
+          clearTimeout(timeoutId);
+          reject(new Error(`Request aborted: ${signal.reason || "cancelled"}`));
+        };
+        signal.addEventListener("abort", abortHandler, { once: true });
+      }
+    });
   }
 
   setHeaders(headers: Record<string, string>) {

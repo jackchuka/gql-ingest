@@ -2,6 +2,23 @@
 export { GQLIngest } from "./lib/gql-ingest";
 export type { GQLIngestOptions, IngestOptions, IngestResult } from "./lib/gql-ingest";
 
+// Event types
+export type {
+  GQLIngestEventType,
+  GQLIngestEventMap,
+  EventOptions,
+  StartedEventPayload,
+  ProgressEventPayload,
+  EntityStartEventPayload,
+  EntityCompleteEventPayload,
+  RowSuccessEventPayload,
+  RowFailureEventPayload,
+  CancelledEventPayload,
+  FinishedEventPayload,
+  ErroredEventPayload,
+} from "./lib/events";
+export { DEFAULT_EVENT_OPTIONS } from "./lib/events";
+
 // Logger exports
 export type { Logger } from "./lib/logger";
 export { noopLogger, createConsoleLogger, createDefaultLogger } from "./lib/logger";
@@ -39,7 +56,7 @@ export {
 } from "./readers";
 
 // Type exports
-export type { MappingConfig } from "./lib/mapper";
+export type { MappingConfig, EntityProcessingCallbacks } from "./lib/mapper";
 
 export type { EntityMetrics, ProcessingMetrics } from "./lib/metrics";
 

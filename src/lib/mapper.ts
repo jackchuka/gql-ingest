@@ -6,6 +6,12 @@ import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
 import { ParallelProcessingConfig, RetryConfig } from "./config";
 import { Logger, noopLogger } from "./logger";
+import {
+  EntityStartEventPayload,
+  EntityCompleteEventPayload,
+  RowSuccessEventPayload,
+  RowFailureEventPayload,
+} from "./events";
 
 export interface MappingConfig {
   // Legacy CSV support
@@ -15,6 +21,16 @@ export interface MappingConfig {
   dataFormat?: string;
   graphqlFile: string;
   mapping: Record<string, unknown>;
+}
+
+/**
+ * Callbacks for entity processing events
+ */
+export interface EntityProcessingCallbacks {
+  onEntityStart?: (payload: Omit<EntityStartEventPayload, "waveIndex">) => void;
+  onEntityComplete?: (payload: EntityCompleteEventPayload) => void;
+  onRowSuccess?: (payload: RowSuccessEventPayload) => void;
+  onRowFailure?: (payload: RowFailureEventPayload) => void;
 }
 
 export class DataMapper {
@@ -79,14 +95,31 @@ export class DataMapper {
     }
   }
 
+  /**
+   * Process an entity (backward-compatible method)
+   */
   async processEntity(
     configPath: string,
     parallelConfig?: ParallelProcessingConfig,
     retryConfig?: RetryConfig,
   ): Promise<void> {
-    const entityName = path.basename(configPath, ".json");
-    this.logger.info(`Processing entity: ${configPath}`);
+    return this.processEntityWithEvents(configPath, parallelConfig, retryConfig);
+  }
 
+  /**
+   * Process an entity with event callbacks and abort support
+   */
+  async processEntityWithEvents(
+    configPath: string,
+    parallelConfig?: ParallelProcessingConfig,
+    retryConfig?: RetryConfig,
+    signal?: AbortSignal,
+    callbacks?: EntityProcessingCallbacks,
+  ): Promise<void> {
+    const entityName = path.basename(configPath, ".json");
+    const entityStartTime = Date.now();
+
+    this.logger.info(`Processing entity: ${configPath}`);
     this.metrics.startEntityProcessing(entityName);
 
     // Read mapping configuration
@@ -113,40 +146,99 @@ export class DataMapper {
     const graphqlPath = path.resolve(configDir, config.graphqlFile);
     const mutation = fs.readFileSync(graphqlPath, "utf8");
 
+    // Emit entityStart event
+    callbacks?.onEntityStart?.({
+      entityName,
+      mappingPath: configPath,
+      totalRows: data.length,
+    });
+
     // Process rows with optional parallelization
     if (parallelConfig && parallelConfig.concurrency > 1) {
-      await this.processRowsConcurrently(
+      await this.processRowsConcurrentlyWithEvents(
         data,
         mutation,
         config.mapping,
         entityName,
         parallelConfig,
         retryConfig,
+        signal,
+        callbacks,
       );
     } else {
-      await this.processRowsSequentially(data, mutation, config.mapping, entityName, retryConfig);
+      await this.processRowsSequentiallyWithEvents(
+        data,
+        mutation,
+        config.mapping,
+        entityName,
+        retryConfig,
+        signal,
+        callbacks,
+      );
     }
 
     this.metrics.finishEntityProcessing(entityName);
+
+    // Emit entityComplete event - convert internal metrics to EntityMetrics format
+    const internalMetrics = this.metrics.getEntityMetrics(entityName);
+    const duration = Date.now() - entityStartTime;
+    const entityMetrics = internalMetrics
+      ? {
+          rowsProcessed: internalMetrics.successCount + internalMetrics.failureCount,
+          successfulRows: internalMetrics.successCount,
+          failedRows: internalMetrics.failureCount,
+          duration,
+        }
+      : {
+          rowsProcessed: 0,
+          successfulRows: 0,
+          failedRows: 0,
+          duration,
+        };
+
+    callbacks?.onEntityComplete?.({
+      entityName,
+      metrics: entityMetrics,
+      success: entityMetrics.failedRows === 0,
+      durationMs: duration,
+    });
   }
 
-  private async processRowsSequentially(
+  private async processRowsSequentiallyWithEvents(
     data: DataRow[],
     mutation: string,
     mapping: Record<string, unknown>,
     entityName: string,
     retryConfig?: RetryConfig,
+    signal?: AbortSignal,
+    callbacks?: EntityProcessingCallbacks,
   ): Promise<void> {
     const totalRows = data.length;
     const variableTypes = this.extractVariableTypes(mutation);
 
     for (let i = 0; i < data.length; i++) {
+      // Check for abort signal
+      if (signal?.aborted) {
+        this.logger.info(`Processing cancelled at row ${i + 1}/${totalRows}`);
+        return;
+      }
+
       const row = data[i];
       const variables = this.mapRowToVariables(row, mapping, variableTypes);
+      const rowStartTime = Date.now();
 
       try {
-        await this.client.executeMutation(mutation, variables, retryConfig);
+        const result = await this.client.executeMutation(mutation, variables, retryConfig, signal);
         this.metrics.recordSuccess(entityName);
+
+        // Emit row success event
+        callbacks?.onRowSuccess?.({
+          entityName,
+          rowIndex: i,
+          row,
+          result,
+          durationMs: Date.now() - rowStartTime,
+        });
 
         // Show progress every 10% or at the end
         if ((i + 1) % Math.max(1, Math.floor(totalRows / 10)) === 0 || i === totalRows - 1) {
@@ -154,19 +246,36 @@ export class DataMapper {
           this.logger.info(`📊 Progress: ${i + 1}/${totalRows} (${progress}%) ✓`);
         }
       } catch (error) {
+        // Check if error is due to abort
+        if (signal?.aborted) {
+          this.logger.info(`Processing cancelled at row ${i + 1}/${totalRows}`);
+          return;
+        }
+
         this.metrics.recordFailure(entityName);
         this.logger.error(`✗ Failed to create entity for row ${i + 1}`, row, error);
+
+        // Emit row failure event
+        callbacks?.onRowFailure?.({
+          entityName,
+          rowIndex: i,
+          row,
+          error: error instanceof Error ? error : new Error(String(error)),
+          retryAttempts: retryConfig?.maxAttempts ?? 3,
+        });
       }
     }
   }
 
-  private async processRowsConcurrently(
+  private async processRowsConcurrentlyWithEvents(
     data: DataRow[],
     mutation: string,
     mapping: Record<string, unknown>,
     entityName: string,
     parallelConfig: ParallelProcessingConfig,
     retryConfig?: RetryConfig,
+    signal?: AbortSignal,
+    callbacks?: EntityProcessingCallbacks,
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
     this.logger.info(`Processing ${data.length} rows with concurrency: ${concurrency}`);
@@ -180,22 +289,63 @@ export class DataMapper {
     const totalRows = data.length;
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      // Check for abort signal before each chunk
+      if (signal?.aborted) {
+        this.logger.info(`Processing cancelled at chunk ${chunkIndex + 1}/${chunks.length}`);
+        return;
+      }
+
       const chunk = chunks[chunkIndex];
-      const promises = chunk.map(async (row) => {
+      const chunkStartIndex = chunkIndex * concurrency;
+
+      const promises = chunk.map(async (row, index) => {
+        const rowIndex = chunkStartIndex + index;
         const variables = this.mapRowToVariables(row, mapping, variableTypes);
+        const rowStartTime = Date.now();
 
         try {
-          const result = await this.client.executeMutation(mutation, variables, retryConfig);
+          const result = await this.client.executeMutation(
+            mutation,
+            variables,
+            retryConfig,
+            signal,
+          );
           this.metrics.recordSuccess(entityName);
-          return { success: true, result, row };
+
+          // Emit row success event
+          callbacks?.onRowSuccess?.({
+            entityName,
+            rowIndex,
+            row,
+            result,
+            durationMs: Date.now() - rowStartTime,
+          });
+
+          return { success: true, result, row, rowIndex };
         } catch (error) {
           this.metrics.recordFailure(entityName);
-          return { success: false, error, row };
+
+          // Emit row failure event
+          callbacks?.onRowFailure?.({
+            entityName,
+            rowIndex,
+            row,
+            error: error instanceof Error ? error : new Error(String(error)),
+            retryAttempts: retryConfig?.maxAttempts ?? 3,
+          });
+
+          return { success: false, error, row, rowIndex };
         }
       });
 
       const results = await Promise.allSettled(promises);
       processedCount += chunk.length;
+
+      // Check if cancelled during chunk processing
+      if (signal?.aborted) {
+        this.logger.info(`Processing cancelled after chunk ${chunkIndex + 1}/${chunks.length}`);
+        return;
+      }
 
       // Count successes and failures in this chunk
       let chunkSuccesses = 0;

@@ -16,6 +16,8 @@ A TypeScript library and CLI tool that reads data from multiple formats (CSV, JS
 - ✅ Entity-level and row-level concurrency control
 - ✅ **Retry capabilities** with exponential backoff and configurable error handling
 - ✅ Comprehensive metrics and progress tracking
+- ✅ **Event-based progress monitoring** with real-time callbacks
+- ✅ **Cancellation support** via AbortController pattern
 
 ## Installation
 
@@ -53,7 +55,7 @@ npm install @jackchuka/gql-ingest
 #### Basic API Usage
 
 ```typescript
-import { GQLIngest } from "@jackchuka/gql-ingest";
+import { GQLIngest, createConsoleLogger } from "@jackchuka/gql-ingest";
 
 // Initialize the client
 const client = new GQLIngest({
@@ -61,7 +63,7 @@ const client = new GQLIngest({
   headers: {
     Authorization: "Bearer YOUR_TOKEN",
   },
-  verbose: true, // Optional: enable verbose logging
+  logger: createConsoleLogger(), // Optional: enable console logging
 });
 
 // Ingest all data from a configuration
@@ -85,7 +87,7 @@ const result = await client.ingestEntities("./config", ["users", "products"]);
 // Or using the ingest method with options
 const result = await client.ingest("./config", {
   entities: ["users", "products"],
-  verbose: true,
+  format: "csv", // Optional: override format detection
 });
 ```
 
@@ -100,12 +102,14 @@ import {
   DependencyResolver,
   MetricsCollector,
   loadConfig,
+  createConsoleLogger,
 } from "@jackchuka/gql-ingest";
 
 // Create your own custom workflow
+const logger = createConsoleLogger();
 const metrics = new MetricsCollector();
-const client = new GraphQLClientWrapper(endpoint, headers, metrics, verbose);
-const mapper = new DataMapper(client, basePath, metrics, verbose);
+const client = new GraphQLClientWrapper(endpoint, headers, metrics, logger);
+const mapper = new DataMapper(client, basePath, metrics, logger);
 
 // Load configuration
 const config = loadConfig("./config");
@@ -123,8 +127,73 @@ const config = loadConfig("./config");
 - `ingestEntities(configPath: string, entities: string[])` - Process specific entities
 - `getMetrics()` - Get current processing metrics
 - `getMetricsSummary()` - Get formatted metrics summary
-- `setVerbose(verbose: boolean)` - Update verbose mode
+- `setLogger(logger: Logger)` - Set custom logger
 - `setHeaders(headers: Record<string, string>)` - Update request headers
+- `cancel(reason?: string)` - Cancel in-progress ingestion
+- `processing` - Property indicating if ingestion is in progress
+
+#### Event-Based Progress Monitoring
+
+GQLIngest extends EventEmitter, enabling real-time progress tracking and cancellation:
+
+```typescript
+import { GQLIngest } from "@jackchuka/gql-ingest";
+
+const client = new GQLIngest({
+  endpoint: "https://your-api.com/graphql",
+  eventOptions: {
+    emitRowEvents: true, // Emit events for each row
+    emitProgressEvents: true, // Emit periodic progress
+    progressInterval: 1000, // Progress every 1 second
+  },
+});
+
+// Listen for events
+client.on("started", (p) => console.log(`Starting ${p.totalEntities} entities`));
+client.on("progress", (p) => console.log(`${p.progressPercent.toFixed(1)}% complete`));
+client.on("entityStart", (p) => console.log(`Processing ${p.entityName}`));
+client.on("entityComplete", (p) => console.log(`${p.entityName}: ${p.metrics.successfulRows} rows`));
+client.on("rowSuccess", (p) => console.log(`Row ${p.rowIndex} OK`));
+client.on("rowFailure", (p) => console.error(`Row ${p.rowIndex} failed: ${p.error.message}`));
+client.on("finished", (p) => console.log(`Done in ${p.durationMs}ms`));
+client.on("errored", (p) => console.error(`Error: ${p.error.message}`));
+client.on("cancelled", (p) => console.log(`Cancelled: ${p.reason}`));
+
+// Handle graceful shutdown
+process.on("SIGINT", () => client.cancel("User interrupted"));
+
+await client.ingest("./config");
+```
+
+**Available Events:**
+
+| Event            | When Emitted             | Key Payload Fields                                |
+| ---------------- | ------------------------ | ------------------------------------------------- |
+| `started`        | Ingestion begins         | `configPath`, `entityNames`, `totalWaves`         |
+| `progress`       | Periodic interval        | `progressPercent`, `successfulRows`, `failedRows` |
+| `entityStart`    | Entity processing begins | `entityName`, `totalRows`, `waveIndex`            |
+| `entityComplete` | Entity processing ends   | `entityName`, `metrics`, `success`                |
+| `rowSuccess`     | Row mutation succeeds    | `entityName`, `rowIndex`, `row`, `result`         |
+| `rowFailure`     | Row mutation fails       | `entityName`, `rowIndex`, `error`                 |
+| `cancelled`      | Processing cancelled     | `reason`, `metrics`, `elapsedMs`                  |
+| `finished`       | Processing completes     | `metrics`, `durationMs`, `allSuccessful`          |
+| `errored`        | Fatal error occurs       | `error`, `metrics`, `elapsedMs`                   |
+
+#### Cancellation Support
+
+Cancel in-progress ingestion using the `cancel()` method or external AbortController:
+
+```typescript
+// Method 1: Using cancel()
+const client = new GQLIngest({ endpoint: "..." });
+process.on("SIGINT", () => client.cancel("User interrupted"));
+await client.ingest("./config");
+
+// Method 2: Using external AbortController
+const controller = new AbortController();
+setTimeout(() => controller.abort("Timeout"), 60000);
+await client.ingest("./config", { signal: controller.signal });
+```
 
 #### TypeScript Support
 
@@ -137,6 +206,17 @@ import type {
   IngestResult,
   ProcessingMetrics,
   EntityMetrics,
+  // Event types
+  EventOptions,
+  StartedEventPayload,
+  ProgressEventPayload,
+  EntityStartEventPayload,
+  EntityCompleteEventPayload,
+  RowSuccessEventPayload,
+  RowFailureEventPayload,
+  CancelledEventPayload,
+  FinishedEventPayload,
+  ErroredEventPayload,
 } from "@jackchuka/gql-ingest";
 ```
 

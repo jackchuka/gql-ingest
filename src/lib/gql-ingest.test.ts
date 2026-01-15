@@ -105,7 +105,7 @@ describe("GQLIngest", () => {
     // Setup DataMapper mock
     mockMapperInstance = {
       discoverMappings: discoverMappingsMock,
-      processEntity: processEntityMock,
+      processEntityWithEvents: processEntityMock,
       getMetrics: jest.fn(),
     } as any;
 
@@ -294,7 +294,9 @@ describe("GQLIngest", () => {
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config", { entities: ["users"] });
+      const result = await ingest.ingest("/path/to/config", {
+        entities: ["users"],
+      });
 
       expect(result.success).toBe(true);
       expect(mockLogger.warn).toHaveBeenCalledWith(
