@@ -1,5 +1,5 @@
 export { DataReader, DataRow, DataReaderFactory } from "./data-reader";
-export { CsvReader, readCsvFile, CsvRow } from "./csv";
+export { CsvReader } from "./csv";
 export { JsonReader } from "./json";
 export { YamlReader } from "./yaml";
 export { JsonlReader } from "./jsonl";

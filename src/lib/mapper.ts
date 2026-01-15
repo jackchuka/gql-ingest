@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { parse, DocumentNode, VariableDefinitionNode } from "graphql";
-import { DataReaderFactory, DataRow } from "./readers";
+import { DataReaderFactory, DataRow } from "../readers";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
 import { ParallelProcessingConfig, RetryConfig } from "./config";
@@ -73,7 +73,8 @@ export class DataMapper {
       this.logger.info(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
       return jsonFiles.map((file) => path.join(configDir, "mappings", file));
     } catch (error) {
-      this.logger.error(`Error reading mappings directory ${mappingsPath}: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error reading mappings directory ${mappingsPath}: ${message}`);
       return [];
     }
   }
@@ -340,7 +341,8 @@ export class DataMapper {
         }
       }
     } catch (error) {
-      this.logger.error(`Error parsing GraphQL mutation: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error parsing GraphQL mutation: ${message}`);
     }
 
     return types;

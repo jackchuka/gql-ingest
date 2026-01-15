@@ -1,6 +1,6 @@
 import { Command } from "commander";
-import { GQLIngest } from "./gql-ingest";
-import { createDefaultLogger } from "./logger";
+import { GQLIngest } from "../lib/gql-ingest";
+import { createDefaultLogger } from "../lib/logger";
 
 const program = new Command();
 
@@ -9,7 +9,7 @@ program
   .description(
     "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   )
-  .version(require("../package.json").version);
+  .version(require("../../package.json").version);
 
 program
   .requiredOption("-e, --endpoint <url>", "GraphQL endpoint URL")
@@ -25,8 +25,10 @@ program
   .option("-q, --quiet", "Suppress logging output")
   .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
   .action(async (options) => {
+    const logger = createDefaultLogger(!options.quiet);
+
     try {
-      console.log("Starting seed data generation...");
+      logger.info("Starting seed data generation...");
 
       // Parse headers if provided
       const headers = options.headers ? JSON.parse(options.headers) : {};
@@ -35,7 +37,7 @@ program
       const client = new GQLIngest({
         endpoint: options.endpoint,
         headers: headers,
-        logger: createDefaultLogger(!options.quiet),
+        logger: logger,
         formatOverride: options.format,
       });
 
@@ -45,14 +47,14 @@ program
       });
 
       // Display metrics summary
-      console.log(client.getMetricsSummary());
+      logger.info(client.getMetricsSummary());
 
       // Exit with appropriate code
       if (!result.success) {
         process.exit(1);
       }
     } catch (error) {
-      console.error("Error:", error);
+      logger.error("Error:", error);
       process.exit(1);
     }
   });

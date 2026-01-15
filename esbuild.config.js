@@ -3,9 +3,9 @@ import esbuild from "esbuild";
 const build = async () => {
   // Build CLI
   await esbuild.build({
-    entryPoints: ["src/cli.ts"],
+    entryPoints: ["src/cli/index.ts"],
     bundle: true,
-    outfile: "dist/cli.js",
+    outfile: "dist/cli/index.js",
     platform: "node",
     target: "node18",
     format: "esm",

@@ -298,7 +298,8 @@ export class GQLIngest {
               const retryConfig = getRetryConfig(entityName, config);
               await mapper.processEntity(configPath, entityConfig, retryConfig);
             } catch (error) {
-              logger.warn(`Warning: Could not process ${configPath}: ${error}`);
+              const message = error instanceof Error ? error.message : String(error);
+              logger.warn(`Warning: Could not process ${configPath}: ${message}`);
             }
           }
         });

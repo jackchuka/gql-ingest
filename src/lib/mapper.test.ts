@@ -6,8 +6,8 @@ import { MetricsCollector } from "./metrics";
 import { Logger } from "./logger";
 
 jest.mock("fs");
-jest.mock("./readers", () => ({
-  ...jest.requireActual("./readers"),
+jest.mock("../readers", () => ({
+  ...jest.requireActual("../readers"),
   readCsvFile: jest.fn(),
   DataReaderFactory: {
     getReader: jest.fn().mockReturnValue({
@@ -136,7 +136,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -192,7 +192,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockRejectedValue(new Error("GraphQL error"));
@@ -233,7 +233,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -273,7 +273,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -307,7 +307,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -338,7 +338,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockRejectedValue(new Error("GraphQL error"));
@@ -390,7 +390,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -442,7 +442,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -502,7 +502,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({
@@ -560,7 +560,7 @@ describe("DataMapper", () => {
         .mockReturnValueOnce(JSON.stringify(mockConfig))
         .mockReturnValueOnce(mockMutation);
 
-      const { DataReaderFactory } = require("./readers");
+      const { DataReaderFactory } = require("../readers");
       DataReaderFactory.getReader().readFile.mockResolvedValue(mockCsvData);
 
       executeMutation.mockResolvedValue({

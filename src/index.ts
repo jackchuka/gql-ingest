@@ -1,16 +1,16 @@
 // Main programmatic API exports
-export { GQLIngest } from "./gql-ingest";
-export type { GQLIngestOptions, IngestOptions, IngestResult } from "./gql-ingest";
+export { GQLIngest } from "./lib/gql-ingest";
+export type { GQLIngestOptions, IngestOptions, IngestResult } from "./lib/gql-ingest";
 
 // Logger exports
-export type { Logger } from "./logger";
-export { noopLogger, createConsoleLogger, createDefaultLogger } from "./logger";
+export type { Logger } from "./lib/logger";
+export { noopLogger, createConsoleLogger, createDefaultLogger } from "./lib/logger";
 
 // Core components for advanced usage
-export { GraphQLClientWrapper } from "./graphql-client";
-export { DataMapper } from "./mapper";
-export { DependencyResolver } from "./dependency-resolver";
-export { MetricsCollector } from "./metrics";
+export { GraphQLClientWrapper } from "./lib/graphql-client";
+export { DataMapper } from "./lib/mapper";
+export { DependencyResolver } from "./lib/dependency-resolver";
+export { MetricsCollector } from "./lib/metrics";
 
 // Configuration interfaces
 export {
@@ -25,7 +25,7 @@ export {
   loadConfig,
   getEntityConfig,
   getRetryConfig,
-} from "./config";
+} from "./lib/config";
 
 // Data reader components
 export {
@@ -36,13 +36,11 @@ export {
   JsonReader,
   YamlReader,
   JsonlReader,
-  readCsvFile,
-  CsvRow,
 } from "./readers";
 
 // Type exports
-export type { MappingConfig } from "./mapper";
+export type { MappingConfig } from "./lib/mapper";
 
-export type { EntityMetrics, ProcessingMetrics } from "./metrics";
+export type { EntityMetrics, ProcessingMetrics } from "./lib/metrics";
 
-export type { DependencyGraph, ExecutionWave } from "./dependency-resolver";
+export type { DependencyGraph, ExecutionWave } from "./lib/dependency-resolver";
