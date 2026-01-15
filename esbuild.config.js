@@ -19,6 +19,7 @@ const build = async () => {
       "csv-parser",
       "graphql-request",
       "commander",
+      "@inquirer/prompts",
     ],
   });
 

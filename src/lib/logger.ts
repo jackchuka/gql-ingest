@@ -21,16 +21,22 @@ export const noopLogger: Logger = {
   error: () => {},
 };
 
+export interface ConsoleLoggerOptions {
+  prefix?: string;
+}
+
 /**
- * Creates a console logger with [gql-ingest] prefix.
- * Used when verbose mode is enabled.
+ * Creates a console logger with optional prefix.
  */
-export function createConsoleLogger(): Logger {
+export function createConsoleLogger(options: ConsoleLoggerOptions = {}): Logger {
+  const { prefix } = options;
+  const fmt = (msg: string) => (prefix ? `[${prefix}] ${msg}` : msg);
+
   return {
-    debug: (msg, ...args) => console.debug(`[gql-ingest] ${msg}`, ...args),
-    info: (msg, ...args) => console.info(`[gql-ingest] ${msg}`, ...args),
-    warn: (msg, ...args) => console.warn(`[gql-ingest] ${msg}`, ...args),
-    error: (msg, ...args) => console.error(`[gql-ingest] ${msg}`, ...args),
+    debug: (msg, ...args) => console.debug(fmt(msg), ...args),
+    info: (msg, ...args) => console.info(fmt(msg), ...args),
+    warn: (msg, ...args) => console.warn(fmt(msg), ...args),
+    error: (msg, ...args) => console.error(fmt(msg), ...args),
   };
 }
 

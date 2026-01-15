@@ -20,7 +20,7 @@ export type {
 export { DEFAULT_EVENT_OPTIONS } from "./lib/events";
 
 // Logger exports
-export type { Logger } from "./lib/logger";
+export type { Logger, ConsoleLoggerOptions } from "./lib/logger";
 export { noopLogger, createConsoleLogger, createDefaultLogger } from "./lib/logger";
 
 // Core components for advanced usage

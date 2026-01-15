@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { GQLIngest } from "../lib/gql-ingest";
-import { createDefaultLogger } from "../lib/logger";
+import { createConsoleLogger, noopLogger } from "../lib/logger";
+import { registerInitCommand } from "./commands/init";
+import { registerAddCommand } from "./commands/add";
 
 const program = new Command();
 
@@ -9,11 +11,17 @@ program
   .description(
     "A CLI tool for ingesting data from files into a GraphQL API. Supports CSV, JSON, JSONL, and YAML file formats.",
   )
-  .version(require("../../package.json").version);
+  .version(require("../../package.json").version)
+  .enablePositionalOptions();
 
+// Register scaffolding subcommands
+registerInitCommand(program);
+registerAddCommand(program);
+
+// Main ingest options on root command
 program
-  .requiredOption("-e, --endpoint <url>", "GraphQL endpoint URL")
-  .requiredOption(
+  .option("-e, --endpoint <url>", "GraphQL endpoint URL")
+  .option(
     "-c, --config <path>",
     "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)",
   )
@@ -25,7 +33,14 @@ program
   .option("-q, --quiet", "Suppress logging output")
   .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
   .action(async (options) => {
-    const logger = createDefaultLogger(!options.quiet);
+    // Only run ingest if endpoint and config are provided
+    if (!options.endpoint || !options.config) {
+      // No ingest options provided, show help
+      program.help();
+      return;
+    }
+
+    const logger = options.quiet ? noopLogger : createConsoleLogger();
 
     try {
       logger.info("Starting seed data generation...");
