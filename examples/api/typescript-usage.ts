@@ -1,4 +1,3 @@
-// oxlint-disable no-unused-vars
 /**
  * TypeScript usage example of gql-ingest programmatic API
  *
@@ -153,7 +152,7 @@ async function robustIngestion(): Promise<void> {
 
 // Example 4: Custom type guards and utilities
 function isSuccessfulResult(result: IngestResult): result is IngestResult & { success: true } {
-  return result.success === true;
+  return result.success;
 }
 
 function generateReport(metrics: ProcessingMetrics): void {
