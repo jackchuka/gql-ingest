@@ -1,4 +1,4 @@
-import { EventEmitter, EventEmitterEventMap } from "events";
+import { EventEmitter } from "events";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
 import { MetricsCollector, ProcessingMetrics } from "./metrics";
@@ -131,7 +131,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
     ...payload: GQLIngestEventMap[K]
   ): boolean {
     try {
-      return this.emit(event, ...payload as any);
+      return this.emit(event, ...(payload as any));
     } catch (error) {
       this.logger.error(`Error in event listener for '${String(event)}':`, error);
       return false;
