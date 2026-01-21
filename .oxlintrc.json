@@ -1,5 +1,30 @@
 {
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
   "rules": {
+    "no-await-in-loop": "off",
+    "typescript/no-extraneous-class": "off",
     "typescript/no-deprecated": "warn"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "no-new": "off",
+        "no-unsafe-type-assertion": "off",
+        "unicorn/no-array-sort": "off"
+      }
+    },
+    {
+      "files": ["examples/**/*.ts"],
+      "rules": {
+        "no-console": "off",
+        "no-unused-vars": "off"
+      }
+    }
+  ]
 }

@@ -2,7 +2,15 @@ import { Command } from "commander";
 import path from "path";
 import { input, select } from "@inquirer/prompts";
 import { createConsoleLogger, noopLogger } from "../../lib/logger";
-import { generateEntityFiles, validateEntityName, toPascalCase, DataFormat } from "../templates";
+import {
+  generateEntityFiles,
+  validateEntityName,
+  toPascalCase,
+  DataFormat,
+  isDataFormat,
+  DATA_FORMAT_CHOICES,
+  DEFAULT_DATA_FORMAT,
+} from "../templates";
 
 interface AddOptions {
   path: string;
@@ -45,16 +53,11 @@ export function registerAddCommand(program: Command): void {
 
         if (isInteractive) {
           // Interactive prompts
-          format = (await select({
+          format = await select({
             message: "Select data format:",
-            choices: [
-              { name: "CSV", value: "csv" },
-              { name: "JSON", value: "json" },
-              { name: "YAML", value: "yaml" },
-              { name: "JSONL", value: "jsonl" },
-            ],
-            default: "csv",
-          })) as DataFormat;
+            choices: DATA_FORMAT_CHOICES,
+            default: DEFAULT_DATA_FORMAT,
+          });
 
           const fieldsInput = await input({
             message: "Enter field names (comma-separated):",
@@ -71,13 +74,15 @@ export function registerAddCommand(program: Command): void {
           });
         } else {
           // Non-interactive: use options or defaults
-          const validFormats = ["csv", "json", "yaml", "jsonl"];
-          if (options.format && !validFormats.includes(options.format)) {
-            logger.error(`Invalid format. Must be one of: ${validFormats.join(", ")}`);
+          if (options.format && !isDataFormat(options.format)) {
+            logger.error(
+              `Invalid format. Must be one of: ${DATA_FORMAT_CHOICES.map((c) => c.value).join(", ")}`,
+            );
             process.exit(1);
           }
 
-          format = (options.format as DataFormat) || "csv";
+          format =
+            options.format && isDataFormat(options.format) ? options.format : DEFAULT_DATA_FORMAT;
           fields = options.fields
             ?.split(",")
             .map((f) => f.trim())
@@ -103,7 +108,7 @@ export function registerAddCommand(program: Command): void {
         logger.info(`  - graphql/${entityName}.graphql`);
         logger.info(`  - mappings/${entityName}.json`);
       } catch (error) {
-        if ((error as Error).name === "ExitPromptError") {
+        if (error instanceof Error && error.name === "ExitPromptError") {
           // User cancelled the prompt
           process.exit(0);
         }

@@ -31,9 +31,14 @@ export function loadConfig(configDir: string, logger: Logger = noopLogger): Conf
     }
 
     const fileContents = fs.readFileSync(configPath, "utf8");
-    const yamlConfig = yaml.load(fileContents) as Partial<Config>;
+    const yamlConfig = yaml.load(fileContents);
 
-    return mergeWithDefaults(yamlConfig);
+    if (yamlConfig === null || typeof yamlConfig !== "object" || Array.isArray(yamlConfig)) {
+      logger.warn("Warning: config.yaml is not a valid object. Using defaults.");
+      return DEFAULT_CONFIG;
+    }
+
+    return mergeWithDefaults(yamlConfig as Partial<Config>);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.warn(`Warning: Failed to parse config.yaml: ${errorMessage}. Using defaults.`);

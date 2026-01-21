@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { parse, DocumentNode, VariableDefinitionNode } from "graphql";
+import { parse, DocumentNode, VariableDefinitionNode, Kind } from "graphql";
 import { DataReaderFactory, DataRow } from "../readers";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
@@ -480,7 +480,7 @@ export class DataMapper {
 
       // Find the operation (mutation/query) and extract variable definitions
       for (const definition of document.definitions) {
-        if (definition.kind === "OperationDefinition" && definition.variableDefinitions) {
+        if (definition.kind === Kind.OPERATION_DEFINITION && definition.variableDefinitions) {
           for (const variableDef of definition.variableDefinitions) {
             const varName = variableDef.variable.name.value;
             const typeName = this.extractTypeName(variableDef);
@@ -501,12 +501,12 @@ export class DataMapper {
   private extractTypeName(variableDef: VariableDefinitionNode): string | null {
     const type = variableDef.type;
 
-    if (type.kind === "NonNullType") {
+    if (type.kind === Kind.NON_NULL_TYPE) {
       // Handle non-null types like String!
-      if (type.type.kind === "NamedType") {
+      if (type.type.kind === Kind.NAMED_TYPE) {
         return type.type.name.value;
       }
-    } else if (type.kind === "NamedType") {
+    } else if (type.kind === Kind.NAMED_TYPE) {
       // Handle nullable types like String
       return type.name.value;
     }

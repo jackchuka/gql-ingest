@@ -7,6 +7,9 @@ import {
   generateConfigYaml,
   ensureDirectories,
   DataFormat,
+  isDataFormat,
+  DATA_FORMAT_CHOICES,
+  DEFAULT_DATA_FORMAT,
 } from "../templates";
 
 interface InitOptions {
@@ -37,26 +40,22 @@ export function registerInitCommand(program: Command): void {
         const isInteractive = options.interactive && process.stdin.isTTY;
 
         // Determine data format
-        let format: DataFormat = "csv";
+        let format: DataFormat = DEFAULT_DATA_FORMAT;
         if (options.example) {
           if (isInteractive) {
-            format = (await select({
+            format = await select({
               message: "Select data format for example entity:",
-              choices: [
-                { name: "CSV", value: "csv" },
-                { name: "JSON", value: "json" },
-                { name: "YAML", value: "yaml" },
-                { name: "JSONL", value: "jsonl" },
-              ],
-              default: "csv",
-            })) as DataFormat;
+              choices: DATA_FORMAT_CHOICES,
+              default: DEFAULT_DATA_FORMAT,
+            });
           } else if (options.format) {
-            const validFormats = ["csv", "json", "yaml", "jsonl"];
-            if (!validFormats.includes(options.format)) {
-              logger.error(`Invalid format. Must be one of: ${validFormats.join(", ")}`);
+            if (!isDataFormat(options.format)) {
+              logger.error(
+                `Invalid format. Must be one of: ${DATA_FORMAT_CHOICES.map((c) => c.value).join(", ")}`,
+              );
               process.exit(1);
             }
-            format = options.format as DataFormat;
+            format = options.format;
           }
         }
 
@@ -82,7 +81,7 @@ export function registerInitCommand(program: Command): void {
         logger.info("  3. Configure mappings in mappings/");
         logger.info(`  4. Run: gql-ingest -e <endpoint> -c ${resolvedPath}`);
       } catch (error) {
-        if ((error as Error).name === "ExitPromptError") {
+        if (error instanceof Error && error.name === "ExitPromptError") {
           // User cancelled the prompt
           process.exit(0);
         }

@@ -131,6 +131,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
     ...payload: GQLIngestEventMap[K]
   ): boolean {
     try {
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       return this.emit(event, ...(payload as any));
     } catch (error) {
       this.logger.error(`Error in event listener for '${String(event)}':`, error);

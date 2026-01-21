@@ -6,6 +6,21 @@ import { CONFIG_TEMPLATE } from "../../lib/config-schema";
 
 export type DataFormat = "csv" | "json" | "yaml" | "jsonl";
 
+const DATA_FORMATS: Set<string> = new Set(["csv", "json", "yaml", "jsonl"]);
+
+export function isDataFormat(value: string): value is DataFormat {
+  return DATA_FORMATS.has(value);
+}
+
+export const DATA_FORMAT_CHOICES = [
+  { name: "CSV", value: "csv" as const },
+  { name: "JSON", value: "json" as const },
+  { name: "YAML", value: "yaml" as const },
+  { name: "JSONL", value: "jsonl" as const },
+] as const;
+
+export const DEFAULT_DATA_FORMAT: DataFormat = "csv";
+
 export interface EntityTemplateOptions {
   format: DataFormat;
   fields: string[];
@@ -35,6 +50,10 @@ function getDesc(schema: { description?: string }): string | undefined {
   return schema.description;
 }
 
+function isKeyOf<T extends object>(obj: T, key: string): key is keyof T & string {
+  return key in obj;
+}
+
 function toCommentedYaml(obj: Record<string, unknown>): string[] {
   return yaml
     .dump(obj, { flowLevel: 2 })
@@ -49,21 +68,22 @@ function generateConfigYamlContent(): string {
 
   // parallelProcessing section
   lines.push("parallelProcessing:");
-  for (const [key, fieldSchema] of Object.entries(schema.parallelProcessing.shape)) {
-    const desc = getDesc(fieldSchema);
-    if (desc) lines.push(`  # ${desc}`);
-    lines.push(
-      `  ${key}: ${defaults.parallelProcessing[key as keyof typeof defaults.parallelProcessing]}`,
-    );
+  for (const [key, value] of Object.entries(defaults.parallelProcessing)) {
+    if (isKeyOf(schema.parallelProcessing.shape, key)) {
+      const desc = getDesc(schema.parallelProcessing.shape[key]);
+      if (desc) lines.push(`  # ${desc}`);
+    }
+    lines.push(`  ${key}: ${value}`);
   }
   lines.push("");
 
   // retry section
   lines.push("retry:");
-  for (const [key, fieldSchema] of Object.entries(schema.retry.shape)) {
-    const desc = getDesc(fieldSchema);
-    if (desc) lines.push(`  # ${desc}`);
-    const value = defaults.retry[key as keyof typeof defaults.retry];
+  for (const [key, value] of Object.entries(defaults.retry)) {
+    if (isKeyOf(schema.retry.shape, key)) {
+      const desc = getDesc(schema.retry.shape[key]);
+      if (desc) lines.push(`  # ${desc}`);
+    }
     lines.push(`  ${key}: ${Array.isArray(value) ? `[${value.join(", ")}]` : value}`);
   }
   lines.push("");
