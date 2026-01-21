@@ -159,15 +159,15 @@ export interface ErroredEventPayload {
  * Map of event types to their payload types
  */
 export interface GQLIngestEventMap {
-  started: StartedEventPayload;
-  progress: ProgressEventPayload;
-  entityStart: EntityStartEventPayload;
-  entityComplete: EntityCompleteEventPayload;
-  rowSuccess: RowSuccessEventPayload;
-  rowFailure: RowFailureEventPayload;
-  cancelled: CancelledEventPayload;
-  finished: FinishedEventPayload;
-  errored: ErroredEventPayload;
+  started: [StartedEventPayload];
+  progress: [ProgressEventPayload];
+  entityStart: [EntityStartEventPayload];
+  entityComplete: [EntityCompleteEventPayload];
+  rowSuccess: [RowSuccessEventPayload];
+  rowFailure: [RowFailureEventPayload];
+  cancelled: [CancelledEventPayload];
+  finished: [FinishedEventPayload];
+  errored: [ErroredEventPayload];
 }
 
 /**

@@ -63,7 +63,7 @@ export interface IngestResult {
  * Main class for programmatic access to gql-ingest functionality.
  * Extends EventEmitter for progress monitoring and cancellation support.
  */
-export class GQLIngest extends EventEmitter {
+export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
   private endpoint: string;
   private headers: Record<string, string>;
   private logger: Logger;
@@ -126,12 +126,12 @@ export class GQLIngest extends EventEmitter {
   /**
    * Safely emit an event, catching any errors from listeners
    */
-  private safeEmit<K extends keyof GQLIngestEventMap>(
+  private safeEmit<const K extends keyof GQLIngestEventMap>(
     event: K,
-    payload: GQLIngestEventMap[K],
+    ...payload: GQLIngestEventMap[K]
   ): boolean {
     try {
-      return this.emit(event, payload);
+      return this.emit(event, ...(payload as any));
     } catch (error) {
       this.logger.error(`Error in event listener for '${String(event)}':`, error);
       return false;
