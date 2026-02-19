@@ -2,9 +2,12 @@ name: Publish to NPM
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   id-token: write
@@ -36,32 +39,13 @@ jobs:
       - name: Build project
         run: pnpm run prepublishOnly
 
-      - name: Check if version changed
-        id: version-check
-        run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PUBLISHED_VERSION=$(npm view @jackchuka/gql-ingest version 2>/dev/null || echo "0.0.0")
-          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "published=$PUBLISHED_VERSION" >> $GITHUB_OUTPUT
-          if [ "$CURRENT_VERSION" != "$PUBLISHED_VERSION" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Version changed from $PUBLISHED_VERSION to $CURRENT_VERSION"
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "Version unchanged: $CURRENT_VERSION"
-          fi
+      - name: Set version from tag
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
 
       - name: Publish to NPM
-        if: steps.version-check.outputs.changed == 'true'
-        run: pnpm publish --no-git-checks
+        run: pnpm publish --no-git-checks --provenance
 
       - name: Create GitHub Release
-        if: steps.version-check.outputs.changed == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          tag_name: v${{ steps.version-check.outputs.current }}
-          name: Release v${{ steps.version-check.outputs.current }}
-          body: |
-            Release v${{ steps.version-check.outputs.current }}
-          draft: false
-          prerelease: false
+          generate_release_notes: true
