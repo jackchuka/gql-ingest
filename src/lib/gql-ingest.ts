@@ -37,8 +37,8 @@ export interface GQLIngestOptions {
  * Options for ingesting data
  */
 export interface IngestOptions {
-  /** Comma-separated list or array of specific entities to process */
-  entities?: string[] | string;
+  /** Path to config.yaml for retry/parallelism/dependency settings */
+  config?: string;
   /** Override data format detection for this operation */
   format?: string;
   /** AbortSignal for external cancellation */
@@ -222,12 +222,12 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
   }
 
   /**
-   * Ingest data from a configuration directory
-   * @param configPath Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)
+   * Ingest entity files
+   * @param entityFiles Array of paths to entity JSON mapping files
    * @param options Optional ingestion options
    * @returns Promise with ingestion result
    */
-  async ingest(configPath: string, options?: IngestOptions): Promise<IngestResult> {
+  async ingest(entityFiles: string[], options?: IngestOptions): Promise<IngestResult> {
     const errors: string[] = [];
 
     // Setup cancellation
@@ -267,25 +267,11 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
         options?.format ?? this.formatOverride,
       );
 
-      // Load configuration
-      const config = loadConfig(configPath, this.logger);
+      // Load configuration (optional)
+      const config = loadConfig(options?.config, this.logger);
 
-      // Parse entities filter if provided
-      let entityFilter: string[] | undefined;
-      if (options?.entities) {
-        if (typeof options.entities === "string") {
-          entityFilter = options.entities.split(",").map((e: string) => e.trim());
-        } else {
-          entityFilter = options.entities;
-        }
-      }
-
-      // Discover all mapping files dynamically
-      const mappingPaths = this.mapper.discoverMappings(configPath, entityFilter);
-
-      if (mappingPaths.length === 0) {
-        const filterMsg = entityFilter ? ` matching entities: ${entityFilter.join(", ")}` : "";
-        const warning = `No mapping files found in ${configPath}/mappings${filterMsg}`;
+      if (entityFiles.length === 0) {
+        const warning = "No entity files provided";
         this.logger.warn(warning);
         return {
           metrics: this.metrics.getMetrics(),
@@ -294,9 +280,12 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
         };
       }
 
-      // Extract entity names from mapping paths
-      const entityNames = mappingPaths.map((path) => basename(path, ".json"));
+      // Entity names derived from file paths
+      const entityNames = entityFiles.map((f) => basename(f, ".json"));
       this.totalEntities = entityNames.length;
+
+      // Build path map from entity names to file paths
+      const pathMap = new Map(entityNames.map((name, i) => [name, entityFiles[i]]));
 
       // Filter dependencies to only include those relevant to selected entities
       const relevantDependencies: Record<string, string[]> = {};
@@ -312,30 +301,22 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
       const resolver = new DependencyResolver(
         entityNames,
         relevantDependencies,
-        !!entityFilter, // Allow partial resolution when using --entities
+        false,
       );
 
       // Validate dependencies
       const validationErrors = resolver.validateDependencies();
       if (validationErrors.length > 0) {
-        if (entityFilter) {
-          // When using entities filter, show warnings instead of errors
-          this.logger.warn("\n⚠️  Warning: Dependency validation issues:");
-          validationErrors.forEach((error) => this.logger.warn(`  - ${error}`));
-          this.logger.warn("This may cause errors if the dependent data doesn't already exist.\n");
-        } else {
-          // Strict validation when processing all entities
-          this.logger.error("Dependency validation errors:");
-          validationErrors.forEach((error) => {
-            this.logger.error(`  - ${error}`);
-            errors.push(error);
-          });
-          return {
-            metrics: this.metrics.getMetrics(),
-            success: false,
-            errors,
-          };
-        }
+        this.logger.error("Dependency validation errors:");
+        validationErrors.forEach((error) => {
+          this.logger.error(`  - ${error}`);
+          errors.push(error);
+        });
+        return {
+          metrics: this.metrics.getMetrics(),
+          success: false,
+          errors,
+        };
       }
 
       const waves = resolver.resolveExecutionOrder();
@@ -343,7 +324,6 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
 
       // Emit started event
       const startedPayload: StartedEventPayload = {
-        configPath,
         totalEntities: entityNames.length,
         entityNames,
         totalWaves: waves.length,
@@ -356,7 +336,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
 
       // Process entities with abort checking
       await this.processEntitiesInWaves(
-        mappingPaths,
+        pathMap,
         resolver,
         this.mapper,
         config,
@@ -417,16 +397,6 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
       this.abortController = null;
       this.stopProgressInterval();
     }
-  }
-
-  /**
-   * Ingest specific entities from a configuration directory
-   * @param configPath Path to configuration directory
-   * @param entities Array of entity names to process
-   * @returns Promise with ingestion result
-   */
-  async ingestEntities(configPath: string, entities: string[]): Promise<IngestResult> {
-    return this.ingest(configPath, { entities });
   }
 
   /**
@@ -497,7 +467,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
    * Process entities in dependency-aware waves with abort support
    */
   private async processEntitiesInWaves(
-    mappingPaths: string[],
+    pathMap: Map<string, string>,
     resolver: DependencyResolver,
     mapper: DataMapper,
     config: Config,
@@ -505,7 +475,6 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
     signal?: AbortSignal,
   ): Promise<void> {
     const waves = resolver.resolveExecutionOrder();
-    const pathMap = new Map(mappingPaths.map((path) => [basename(path, ".json"), path]));
 
     logger.info(`Processing ${waves.length} dependency waves...`);
 

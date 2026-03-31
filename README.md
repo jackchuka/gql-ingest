@@ -28,7 +28,7 @@ A TypeScript library and CLI tool that reads data from multiple formats (CSV, JS
 npm install -g @jackchuka/gql-ingest
 
 # Or use with npx (no installation required)
-npx @jackchuka/gql-ingest --endpoint <url> --config <path>
+npx @jackchuka/gql-ingest -e <url> [-c config.yaml] entity1.json entity2.json
 ```
 
 ### For Development
@@ -46,13 +46,13 @@ Initialize a new configuration and start ingesting data in minutes:
 
 ```bash
 # Create a new configuration directory
-gql-ingest init ./my-config
+gql-ingest init ./my-project
 
 # Add a new entity
-gql-ingest add users -p ./my-config -f json --fields "id,name,email"
+gql-ingest add users -p ./my-project -f json --fields "id,name,email"
 
 # Run ingestion
-gql-ingest -e https://your-api.com/graphql -c ./my-config
+gql-ingest -e https://your-api.com/graphql ./my-project/users/users.json
 ```
 
 ## Usage
@@ -75,11 +75,14 @@ Options:
 
 This creates:
 
-- `data/` - Data files directory
-- `graphql/` - GraphQL mutation files
-- `mappings/` - Mapping configuration files
-- `config.yaml` - Processing configuration
-- Example entity files (by default)
+```
+my-project/
+├── config.yaml
+└── example/
+    ├── example.csv
+    ├── example.graphql
+    └── example.json
+```
 
 #### Add Entity
 
@@ -101,15 +104,14 @@ Interactive mode prompts for format, fields, and mutation name. Use `--no-intera
 
 #### Run Ingestion
 
-Ingest data from configuration into GraphQL API:
+Ingest data from entity files into GraphQL API:
 
 ```bash
-gql-ingest [options]
+gql-ingest [options] <entity files...>
 
 Options:
   -e, --endpoint <url>     GraphQL endpoint URL (required)
-  -c, --config <path>      Path to configuration directory (required)
-  -n, --entities <list>    Comma-separated list of entities to process
+  -c, --config <path>      Path to config.yaml (optional, for orchestration settings)
   -h, --headers <headers>  JSON string of headers
   -f, --format <format>    Override data format detection
   -q, --quiet              Suppress output
@@ -118,22 +120,22 @@ Options:
 ### CLI Examples
 
 ```bash
-# Basic usage
+# Basic usage — pass entity files as positional arguments
 gql-ingest \
   -e https://your-graphql-api.com/graphql \
-  -c ./examples/demo
+  ./examples/demo/items/items.json
 
 # With authentication headers
 gql-ingest \
   -e https://your-graphql-api.com/graphql \
-  -c ./examples/demo \
-  -h '{"Authorization": "Bearer YOUR_TOKEN"}'
+  -h '{"Authorization": "Bearer YOUR_TOKEN"}' \
+  ./examples/demo/users/users.json ./examples/demo/items/items.json
 
-# Process specific entities only
+# With optional config for orchestration (retry, parallelism, dependencies)
 gql-ingest \
   -e https://your-graphql-api.com/graphql \
-  -c ./examples/demo \
-  -n users,products
+  -c ./examples/demo/config.yaml \
+  ./examples/demo/users/users.json ./examples/demo/items/items.json
 ```
 
 ### Programmatic API
@@ -160,8 +162,8 @@ const client = new GQLIngest({
   logger: createConsoleLogger({ prefix: "my-app" }), // Optional: enable logging with prefix
 });
 
-// Ingest all data from a configuration
-const result = await client.ingest("./config");
+// Ingest all data from entity files
+const result = await client.ingest(["./users/users.json"]);
 
 // Check if ingestion was successful
 if (result.success) {
@@ -172,15 +174,14 @@ if (result.success) {
 }
 ```
 
-#### Processing Specific Entities
+#### Processing Multiple Entities
 
 ```typescript
-// Process only specific entities
-const result = await client.ingestEntities("./config", ["users", "products"]);
+// Process multiple entity files
+const result = await client.ingest(["./users/users.json", "./products/products.json"]);
 
-// Or using the ingest method with options
-const result = await client.ingest("./config", {
-  entities: ["users", "products"],
+// With options
+const result = await client.ingest(["./users/users.json", "./products/products.json"], {
   format: "csv", // Optional: override format detection
 });
 ```
@@ -203,10 +204,10 @@ import {
 const logger = createConsoleLogger();
 const metrics = new MetricsCollector();
 const client = new GraphQLClientWrapper(endpoint, headers, metrics, logger);
-const mapper = new DataMapper(client, basePath, metrics, logger);
+const mapper = new DataMapper(client, metrics, logger);
 
 // Load configuration
-const config = loadConfig("./config");
+const config = loadConfig();
 
 // Process entities with custom logic
 // ... your custom implementation
@@ -217,8 +218,7 @@ const config = loadConfig("./config");
 **GQLIngest Class Methods:**
 
 - `constructor(options: GQLIngestOptions)` - Initialize the client
-- `ingest(configPath: string, options?: IngestOptions)` - Ingest data from a configuration
-- `ingestEntities(configPath: string, entities: string[])` - Process specific entities
+- `ingest(entityPaths: string[], options?: IngestOptions)` - Ingest data from entity files
 - `getMetrics()` - Get current processing metrics
 - `getMetricsSummary()` - Get formatted metrics summary
 - `setLogger(logger: Logger)` - Set custom logger
@@ -258,14 +258,14 @@ client.on("cancelled", (p) => console.log(`Cancelled: ${p.reason}`));
 // Handle graceful shutdown
 process.on("SIGINT", () => client.cancel("User interrupted"));
 
-await client.ingest("./config");
+await client.ingest(["./users/users.json"]);
 ```
 
 **Available Events:**
 
 | Event            | When Emitted             | Key Payload Fields                                |
 | ---------------- | ------------------------ | ------------------------------------------------- |
-| `started`        | Ingestion begins         | `configPath`, `entityNames`, `totalWaves`         |
+| `started`        | Ingestion begins         | `entityNames`, `totalWaves`                       |
 | `progress`       | Periodic interval        | `progressPercent`, `successfulRows`, `failedRows` |
 | `entityStart`    | Entity processing begins | `entityName`, `totalRows`, `waveIndex`            |
 | `entityComplete` | Entity processing ends   | `entityName`, `metrics`, `success`                |
@@ -283,12 +283,12 @@ Cancel in-progress ingestion using the `cancel()` method or external AbortContro
 // Method 1: Using cancel()
 const client = new GQLIngest({ endpoint: "..." });
 process.on("SIGINT", () => client.cancel("User interrupted"));
-await client.ingest("./config");
+await client.ingest(["./users/users.json"]);
 
 // Method 2: Using external AbortController
 const controller = new AbortController();
 setTimeout(() => controller.abort("Timeout"), 60000);
-await client.ingest("./config", { signal: controller.signal });
+await client.ingest(["./users/users.json"], { signal: controller.signal });
 ```
 
 #### TypeScript Support
@@ -389,33 +389,30 @@ entityConfig:
 
 ## Selective Entity Processing
 
-The `--entities` flag allows you to process specific entities instead of all discovered mappings:
+Pass only the entity files you want to process as positional arguments:
 
-- Process multiple entities: `--entities users,products,orders`
-- Process a single entity: `--entities items`
-- Entities are processed in dependency order automatically
+- Process multiple entities: `gql-ingest -e <url> users/users.json products/products.json`
+- Process a single entity: `gql-ingest -e <url> items/items.json`
+- Entities are processed in dependency order automatically when `-c config.yaml` is provided
 - Missing dependencies will trigger a warning but not prevent execution
 
-**Note**: When using `--entities` with entity dependencies defined in `config.yaml`, the tool will warn you about any missing dependencies but will still attempt to process the selected entities. Ensure dependent data exists in your GraphQL API before processing entities with unmet dependencies.
+**Note**: When using entity dependencies defined in `config.yaml`, the tool will warn you about any missing dependencies but will still attempt to process the selected entities. Ensure dependent data exists in your GraphQL API before processing entities with unmet dependencies.
 
 ## Configuration
 
-The `--config` flag points to a configuration directory containing these necessary files:
+Each entity is defined by a JSON file colocated with its data and GraphQL mutation files. Paths in the entity file resolve relative to the entity file's directory.
 
-- `mappings/` - JSON files that map CSV columns to GraphQL variables
-- `config.yaml` - _(Optional)_ Parallel processing and dependency configuration
-
-Each entity has three corresponding files across these directories with matching names.
+The optional `-c` flag points to a `config.yaml` file for orchestration settings (retry, parallelism, dependencies).
 
 ### Example Configuration
 
-**examples/demo/mappings/items.json**:
+**examples/demo/items/items.json** (entity definition):
 
 ```json
 {
-  "dataFile": "data/items.csv",
+  "dataFile": "items.csv",
   "dataFormat": "csv",
-  "graphqlFile": "graphql/items.graphql",
+  "graphqlFile": "items.graphql",
   "mapping": {
     "name": "item_name",
     "sku": "item_sku"
@@ -423,7 +420,7 @@ Each entity has three corresponding files across these directories with matching
 }
 ```
 
-**examples/demo/data/items.csv**:
+**examples/demo/items/items.csv**:
 
 ```csv
 item_name,item_sku
@@ -431,7 +428,7 @@ Item1,item-1-sku
 Item2,item-2-sku
 ```
 
-**examples/demo/graphql/items.graphql**:
+**examples/demo/items/items.graphql**:
 
 ```graphql
 mutation CreateItem($name: String!, $sku: String!) {
@@ -487,11 +484,11 @@ GQL Ingest now supports multiple data formats beyond CSV for more flexible data 
 The tool automatically detects the format based on file extension, or you can specify it explicitly:
 
 ```bash
-# Auto-detect from mapping configuration
-gql-ingest --endpoint <url> --config ./config
+# Auto-detect from entity file configuration
+gql-ingest -e <url> ./items/items.json
 
 # Force specific format
-gql-ingest --endpoint <url> --config ./config --format json
+gql-ingest -e <url> --format json ./items/items.json
 ```
 
 ### JSON/YAML Format Examples
@@ -500,7 +497,7 @@ gql-ingest --endpoint <url> --config ./config --format json
 
 For complex GraphQL mutations with nested input types, you can map the entire data object:
 
-**data/products.json**:
+**products/products.json** (data file):
 
 ```json
 [
@@ -531,13 +528,13 @@ For complex GraphQL mutations with nested input types, you can map the entire da
 ]
 ```
 
-**mappings/products.json**:
+**products/products.entity.json** (entity definition):
 
 ```json
 {
-  "dataFile": "data/products.json",
+  "dataFile": "products.json",
   "dataFormat": "json",
-  "graphqlFile": "graphql/newProduct.graphql",
+  "graphqlFile": "newProduct.graphql",
   "mapping": {
     "input": "$" // Map entire object to input variable
   }
@@ -548,7 +545,7 @@ For complex GraphQL mutations with nested input types, you can map the entire da
 
 For transforming flat JSON into nested structures:
 
-**data/products-flat.json**:
+**products/products-flat.json** (data file):
 
 ```json
 [
@@ -560,12 +557,12 @@ For transforming flat JSON into nested structures:
 ]
 ```
 
-**mappings/products-flat.json**:
+**products/products.entity.json** (entity definition with path-based mapping):
 
 ```json
 {
-  "dataFile": "data/products-flat.json",
-  "graphqlFile": "graphql/newProduct.graphql",
+  "dataFile": "products-flat.json",
+  "graphqlFile": "newProduct.graphql",
   "mapping": {
     "input": {
       "name": "$.product_name",
@@ -580,7 +577,7 @@ For transforming flat JSON into nested structures:
 
 YAML provides a more readable alternative:
 
-**data/products.yaml**:
+**products/products.yaml**:
 
 ```yaml
 - name: Premium T-Shirt
@@ -614,21 +611,22 @@ pnpm run test        # Run test suite
 
 ## How It Works
 
-1. **Discovery**: The tool scans the `mappings/` directory for `.json` files
-2. **Dependency Resolution**: Analyzes `entityDependencies` to create execution waves
-3. **Parallel Processing**: For each dependency wave:
+1. **Entity Loading**: The tool reads the entity JSON files passed as arguments
+2. **Path Resolution**: Data files and GraphQL mutations are resolved relative to each entity file's directory
+3. **Dependency Resolution**: If `-c config.yaml` is provided, analyzes `entityDependencies` to create execution waves
+4. **Parallel Processing**: For each dependency wave:
    - Processes up to `entityConcurrency` entities simultaneously
-   - Within each entity, processes up to `concurrency` CSV rows concurrently
+   - Within each entity, processes up to `concurrency` rows concurrently
    - Waits for the entire wave to complete before starting the next wave
-4. **GraphQL Execution**: For each CSV row:
+5. **GraphQL Execution**: For each data row:
    - Loads the GraphQL mutation definition
-   - Maps CSV columns to GraphQL variables using the mapping configuration
+   - Maps data fields to GraphQL variables using the mapping configuration
    - Executes the mutation against the GraphQL endpoint
-5. **Error Handling & Retries**:
+6. **Error Handling & Retries**:
    - Failed mutations are automatically retried with exponential backoff
    - Non-retryable errors (e.g., validation failures) are logged and skipped
    - Configurable retry policies per entity type
-6. **Metrics & Monitoring**:
+7. **Metrics & Monitoring**:
    - Real-time progress tracking and success/failure rates
    - Retry attempt counts and success rates
    - Detailed per-entity performance breakdown

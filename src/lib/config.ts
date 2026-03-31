@@ -1,5 +1,4 @@
 import fs from "fs";
-import path from "path";
 import * as yaml from "js-yaml";
 import { Logger, noopLogger } from "./logger";
 import {
@@ -21,27 +20,28 @@ export const DEFAULT_CONFIG: Config = {
   entityDependencies: {},
 };
 
-export function loadConfig(configDir: string, logger: Logger = noopLogger): Config {
-  const configPath = path.join(configDir, "config.yaml");
+export function loadConfig(
+  configFile?: string,
+  logger: Logger = noopLogger,
+): Config {
+  if (!configFile) {
+    logger.info("No config file provided, using defaults");
+    return DEFAULT_CONFIG;
+  }
 
   try {
-    if (!fs.existsSync(configPath)) {
-      logger.info("No config.yaml found, using default sequential processing");
-      return DEFAULT_CONFIG;
-    }
-
-    const fileContents = fs.readFileSync(configPath, "utf8");
-    const yamlConfig = yaml.load(fileContents);
-
-    if (yamlConfig === null || typeof yamlConfig !== "object" || Array.isArray(yamlConfig)) {
-      logger.warn("Warning: config.yaml is not a valid object. Using defaults.");
-      return DEFAULT_CONFIG;
-    }
-
-    return mergeWithDefaults(yamlConfig as Partial<Config>);
+    const content = fs.readFileSync(configFile, "utf-8");
+    const yamlConfig = yaml.load(content) as Partial<Config>;
+    logger.info(`Loaded config from ${configFile}`);
+    return mergeWithDefaults(yamlConfig);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.warn(`Warning: Failed to parse config.yaml: ${errorMessage}. Using defaults.`);
+    const isNotFound =
+      error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT";
+    if (isNotFound) {
+      logger.info(`Config file not found at ${configFile}, using defaults`);
+    } else {
+      logger.warn(`Failed to parse ${configFile}, using defaults`);
+    }
     return DEFAULT_CONFIG;
   }
 }

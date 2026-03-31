@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import path from "path";
 import { GQLIngest } from "../lib/gql-ingest";
 import { createConsoleLogger, noopLogger } from "../lib/logger";
 import { registerInitCommand } from "./commands/init";
@@ -20,22 +21,21 @@ registerAddCommand(program);
 
 // Main ingest options on root command
 program
+  .argument("[entityFiles...]", "Entity file paths (JSON files defining data source, mutation, and field mapping)")
   .option("-e, --endpoint <url>", "GraphQL endpoint URL")
   .option(
     "-c, --config <path>",
-    "Path to configuration directory (containing data/, graphql/, mappings/ subdirectories)",
+    "Path to config.yaml for retry, parallelism, and dependency settings",
   )
   .option(
     "-n, --entities <entities>",
-    "Comma-separated list of specific entities to process (e.g., users,products)",
+    "Comma-separated list of specific entities to process (filters positional entity files by name)",
   )
   .option("-h, --headers <headers>", "JSON string of headers to include in requests")
   .option("-q, --quiet", "Suppress logging output")
   .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
-  .action(async (options) => {
-    // Only run ingest if endpoint and config are provided
-    if (!options.endpoint || !options.config) {
-      // No ingest options provided, show help
+  .action(async (entityFiles: string[], options) => {
+    if (!options.endpoint || entityFiles.length === 0) {
       program.help();
       return;
     }
@@ -45,10 +45,8 @@ program
     try {
       logger.info("Starting seed data generation...");
 
-      // Parse headers if provided
       const headers = options.headers ? JSON.parse(options.headers) : {};
 
-      // Initialize GQLIngest client
       const client = new GQLIngest({
         endpoint: options.endpoint,
         headers: headers,
@@ -56,15 +54,23 @@ program
         formatOverride: options.format,
       });
 
-      // Perform ingestion
-      const result = await client.ingest(options.config, {
-        entities: options.entities,
+      let filesToProcess = entityFiles;
+      if (options.entities) {
+        const filterNames = new Set(
+          options.entities.split(",").map((e: string) => e.trim()),
+        );
+        filesToProcess = entityFiles.filter((f: string) => {
+          const name = path.basename(f, ".json");
+          return filterNames.has(name);
+        });
+      }
+
+      const result = await client.ingest(filesToProcess, {
+        config: options.config,
       });
 
-      // Display metrics summary
       logger.info(client.getMetricsSummary());
 
-      // Exit with appropriate code
       if (!result.success) {
         process.exit(1);
       }

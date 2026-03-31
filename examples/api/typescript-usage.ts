@@ -23,7 +23,7 @@ async function basicTypedUsage(): Promise<void> {
     headers: {
       Authorization: "Bearer YOUR_TOKEN",
     },
-    logger: createConsoleLogger({ prefix: "gql-ingest" }), // Optional prefix
+    logger: createConsoleLogger({ prefix: "gql-ingest" }),
     formatOverride: "csv",
   };
 
@@ -31,11 +31,14 @@ async function basicTypedUsage(): Promise<void> {
 
   // Ingest with typed options
   const ingestOptions: IngestOptions = {
-    entities: ["users", "products"],
+    config: "./config.yaml",
     format: "json",
   };
 
-  const result: IngestResult = await client.ingest("./config", ingestOptions);
+  const result: IngestResult = await client.ingest(
+    ["./users/users.json", "./products/products.json"],
+    ingestOptions,
+  );
 
   // Type-safe access to result properties
   if (result.success) {
@@ -71,30 +74,26 @@ class DataIngestionService {
       },
     });
 
-    this.defaultOptions = {};
+    this.defaultOptions = {
+      config: "./config.yaml",
+    };
   }
 
-  async ingestUsers(configPath: string): Promise<IngestResult> {
-    return this.client.ingest(configPath, {
-      ...this.defaultOptions,
-      entities: ["users"],
-    });
+  async ingestUsers(): Promise<IngestResult> {
+    return this.client.ingest(["./users/users.json"], this.defaultOptions);
   }
 
-  async ingestProducts(configPath: string): Promise<IngestResult> {
-    return this.client.ingest(configPath, {
-      ...this.defaultOptions,
-      entities: ["products"],
-    });
+  async ingestProducts(): Promise<IngestResult> {
+    return this.client.ingest(["./products/products.json"], this.defaultOptions);
   }
 
-  async ingestWithRetry(configPath: string, maxRetries: number = 3): Promise<IngestResult> {
+  async ingestWithRetry(entityFiles: string[], maxRetries: number = 3): Promise<IngestResult> {
     let lastResult: IngestResult | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       console.log(`Attempt ${attempt} of ${maxRetries}`);
 
-      lastResult = await this.client.ingest(configPath, this.defaultOptions);
+      lastResult = await this.client.ingest(entityFiles, this.defaultOptions);
 
       if (lastResult.success) {
         return lastResult;
@@ -124,14 +123,14 @@ async function robustIngestion(): Promise<void> {
 
   try {
     // Ingest users with retry logic
-    const userResult = await service.ingestWithRetry("./config/users");
+    const userResult = await service.ingestWithRetry(["./users/users.json"]);
 
     if (!userResult.success) {
       throw new Error(`Failed to ingest users: ${userResult.errors?.join(", ")}`);
     }
 
     // Ingest products
-    const productResult = await service.ingestProducts("./config/products");
+    const productResult = await service.ingestProducts();
 
     if (!productResult.success) {
       console.warn("Product ingestion failed, but continuing...");

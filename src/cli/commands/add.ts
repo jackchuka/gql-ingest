@@ -104,9 +104,9 @@ export function registerAddCommand(program: Command): void {
 
         logger.info("");
         logger.info(`Created entity: ${entityName}`);
-        logger.info(`  - data/${entityName}.${format}`);
-        logger.info(`  - graphql/${entityName}.graphql`);
-        logger.info(`  - mappings/${entityName}.json`);
+        logger.info(`  - ${entityName}/${entityName}.${format}`);
+        logger.info(`  - ${entityName}/${entityName}.graphql`);
+        logger.info(`  - ${entityName}/${entityName}.json`);
       } catch (error) {
         if (error instanceof Error && error.name === "ExitPromptError") {
           // User cancelled the prompt

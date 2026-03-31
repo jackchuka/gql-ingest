@@ -19,8 +19,6 @@ export type GQLIngestEventType =
  * Payload for 'started' event - emitted when ingestion begins
  */
 export interface StartedEventPayload {
-  /** Path to configuration directory */
-  configPath: string;
   /** Total number of entities to process */
   totalEntities: number;
   /** Names of entities that will be processed */

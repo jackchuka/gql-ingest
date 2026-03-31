@@ -139,7 +139,10 @@ async function main() {
 
   // === Run ingestion ===
   try {
-    const result = await client.ingest("./config");
+    const result = await client.ingest(
+      ["./users/users.json", "./products/products.json"],
+      { config: "./config.yaml" },
+    );
 
     if (result.cancelled) {
       console.log("Ingestion was cancelled");
@@ -181,9 +184,10 @@ async function withAbortController() {
     clearTimeout(timeout);
   });
 
-  const result = await client.ingest("./config", {
-    signal: controller.signal,
-  });
+  const result = await client.ingest(
+    ["./users/users.json", "./products/products.json"],
+    { config: "./config.yaml", signal: controller.signal },
+  );
 
   clearTimeout(timeout);
   return result;
@@ -208,7 +212,7 @@ async function withMinimalEvents() {
   );
   client.on("finished", (p) => console.log(`Done in ${p.durationMs}ms`));
 
-  return client.ingest("./config");
+  return client.ingest(["./users/users.json", "./products/products.json"]);
 }
 
 // Run the main example

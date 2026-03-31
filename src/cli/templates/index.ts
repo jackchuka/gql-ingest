@@ -132,36 +132,39 @@ export async function generateEntityFiles(
   force = false,
 ): Promise<void> {
   const { format, fields, mutationName } = options;
+  const entityDir = path.join(basePath, entityName);
 
-  // Generate data file
-  const dataPath = path.join(basePath, "data", `${entityName}.${format}`);
-  if (!fs.existsSync(dataPath) || force) {
-    const dataContent = generateDataFile(format, fields);
-    fs.writeFileSync(dataPath, dataContent, "utf-8");
-    logger.info(`Created data/${entityName}.${format}`);
-  } else {
-    logger.warn(`data/${entityName}.${format} already exists, skipping`);
+  if (!fs.existsSync(entityDir)) {
+    fs.mkdirSync(entityDir, { recursive: true });
+    logger.info(`Created directory: ${entityName}/`);
   }
 
-  // Generate GraphQL file
-  const graphqlPath = path.join(basePath, "graphql", `${entityName}.graphql`);
-  if (!fs.existsSync(graphqlPath) || force) {
-    const graphqlContent = generateGraphQLFile(mutationName, fields);
-    fs.writeFileSync(graphqlPath, graphqlContent, "utf-8");
-    logger.info(`Created graphql/${entityName}.graphql`);
-  } else {
-    logger.warn(`graphql/${entityName}.graphql already exists, skipping`);
-  }
+  const writeFile = (filePath: string, content: string, label: string) => {
+    if (!fs.existsSync(filePath) || force) {
+      fs.writeFileSync(filePath, content, "utf-8");
+      logger.info(`Created ${label}`);
+    } else {
+      logger.warn(`${label} already exists, skipping`);
+    }
+  };
 
-  // Generate mapping file
-  const mappingPath = path.join(basePath, "mappings", `${entityName}.json`);
-  if (!fs.existsSync(mappingPath) || force) {
-    const mappingContent = generateMappingFile(entityName, format, fields);
-    fs.writeFileSync(mappingPath, mappingContent, "utf-8");
-    logger.info(`Created mappings/${entityName}.json`);
-  } else {
-    logger.warn(`mappings/${entityName}.json already exists, skipping`);
-  }
+  writeFile(
+    path.join(entityDir, `${entityName}.${format}`),
+    generateDataFile(format, fields),
+    `${entityName}/${entityName}.${format}`,
+  );
+
+  writeFile(
+    path.join(entityDir, `${entityName}.graphql`),
+    generateGraphQLFile(mutationName, fields),
+    `${entityName}/${entityName}.graphql`,
+  );
+
+  writeFile(
+    path.join(entityDir, `${entityName}.json`),
+    generateEntityDefFile(entityName, format, fields),
+    `${entityName}/${entityName}.json`,
+  );
 }
 
 function generateDataFile(format: DataFormat, fields: string[]): string {
@@ -207,13 +210,13 @@ ${responseFields}
 `;
 }
 
-function generateMappingFile(entityName: string, format: DataFormat, fields: string[]): string {
+function generateEntityDefFile(entityName: string, format: DataFormat, fields: string[]): string {
   const mapping = Object.fromEntries(fields.map((f) => [f, f]));
 
   const config = {
-    dataFile: `data/${entityName}.${format}`,
+    dataFile: `${entityName}.${format}`,
     dataFormat: format,
-    graphqlFile: `graphql/${entityName}.graphql`,
+    graphqlFile: `${entityName}.graphql`,
     mapping,
   };
 
@@ -235,13 +238,8 @@ export function validateEntityName(name: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name);
 }
 
-export function ensureDirectories(basePath: string, logger: Logger): void {
-  const dirs = ["data", "graphql", "mappings"];
-  for (const dir of dirs) {
-    const dirPath = path.join(basePath, dir);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-      logger.info(`Created directory: ${dir}/`);
-    }
+export function ensureDirectories(basePath: string, _logger: Logger): void {
+  if (!fs.existsSync(basePath)) {
+    fs.mkdirSync(basePath, { recursive: true });
   }
 }
