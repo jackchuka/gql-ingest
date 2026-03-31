@@ -49,6 +49,7 @@
     "graphql": "16.13.2",
     "graphql-request": "^7.2.0",
     "js-yaml": "^4.1.0",
+    "tinyglobby": "^0.2.15",
     "zod": "^4.3.5"
   },
   "devDependencies": {

@@ -1,8 +1,23 @@
 import { Command } from "commander";
+import { globSync } from "tinyglobby";
 import { GQLIngest } from "../lib/gql-ingest";
 import { createConsoleLogger, noopLogger } from "../lib/logger";
 import { registerInitCommand } from "./commands/init";
 import { registerAddCommand } from "./commands/add";
+
+const GLOB_CHARS = /[*?{}[\]]/;
+
+function resolveEntityFiles(patterns: string[]): string[] {
+  const files: string[] = [];
+  for (const pattern of patterns) {
+    if (GLOB_CHARS.test(pattern)) {
+      files.push(...globSync(pattern));
+    } else {
+      files.push(pattern);
+    }
+  }
+  return [...new Set(files)];
+}
 
 const program = new Command();
 
@@ -36,8 +51,8 @@ program
   .option("-h, --headers <headers>", "JSON string of headers to include in requests")
   .option("-q, --quiet", "Suppress logging output")
   .option("-f, --format <format>", "Override data format detection (csv, json, yaml, jsonl)")
-  .action(async (entityFiles: string[], options) => {
-    if (!options.endpoint || entityFiles.length === 0) {
+  .action(async (entityFilePatterns: string[], options) => {
+    if (!options.endpoint || entityFilePatterns.length === 0) {
       program.help();
       return;
     }
@@ -45,6 +60,12 @@ program
     const logger = options.quiet ? noopLogger : createConsoleLogger();
 
     try {
+      const entityFiles = resolveEntityFiles(entityFilePatterns);
+      if (entityFiles.length === 0) {
+        logger.error("No entity files matched the provided patterns");
+        process.exit(1);
+      }
+
       logger.info("Starting seed data generation...");
 
       const headers = options.headers ? JSON.parse(options.headers) : {};

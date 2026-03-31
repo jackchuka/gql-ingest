@@ -349,8 +349,8 @@ export class DataMapper {
       }
       // Handle path-based mapping for nested data (e.g., "input.name": "$.product.name")
       else if (typeof mappingValue === "string" && mappingValue.startsWith("$.")) {
-        const path = mappingValue.substring(2); // Remove '$.'
-        const value = this.getValueByPath(row, path);
+        const dataPath = mappingValue.substring(2); // Remove '$.'
+        const value = this.getValueByPath(row, dataPath);
         if (value !== undefined) {
           const type = variableTypes[graphqlVar];
           variables[graphqlVar] = this.convertValue(value, type, graphqlVar);
@@ -371,8 +371,8 @@ export class DataMapper {
     return variables;
   }
 
-  private getValueByPath(obj: any, path: string): any {
-    const parts = path.split(".");
+  private getValueByPath(obj: any, dataPath: string): any {
+    const parts = dataPath.split(".");
     let current = obj;
 
     for (const part of parts) {
@@ -399,8 +399,8 @@ export class DataMapper {
       const result: any = {};
       for (const [key, value] of Object.entries(mappingObj)) {
         if (typeof value === "string" && value.startsWith("$.")) {
-          const path = value.substring(2);
-          let fieldValue = this.getValueByPath(row, path);
+          const dataPath = value.substring(2);
+          let fieldValue = this.getValueByPath(row, dataPath);
 
           // Handle special case for array fields (e.g., comma-separated values)
           if (key === "values" && typeof fieldValue === "string" && fieldValue.includes(",")) {
