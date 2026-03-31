@@ -576,6 +576,54 @@ For transforming flat JSON into nested structures:
 }
 ```
 
+#### Cross-Entity References
+
+When one entity needs values produced by another (e.g., a server-generated ID), use `outputCapture` and `$ref`:
+
+**users/entity.json** (captures the created ID):
+
+```json
+{
+  "name": "users",
+  "dataFile": "users.csv",
+  "graphqlFile": "users.graphql",
+  "mapping": { "name": "user_name", "email": "user_email" },
+  "outputCapture": {
+    "key": "$.user_name",
+    "fields": { "id": "$.createUser.id" }
+  }
+}
+```
+
+- `outputCapture.key` — JSONPath into the input row, used as the lookup key
+- `outputCapture.fields` — map of field names to JSONPaths into the mutation response
+
+**items/entity.json** (references the captured user ID):
+
+```json
+{
+  "name": "items",
+  "dataFile": "items.csv",
+  "graphqlFile": "items.graphql",
+  "mapping": {
+    "name": "item_name",
+    "sku": "item_sku",
+    "createdBy": { "$ref": "users", "key": "$.owner_name", "field": "id" }
+  }
+}
+```
+
+- `$ref` — the entity name that captured the value
+- `key` — JSONPath into the current row to get the lookup key
+- `field` — the captured field name to retrieve
+
+The referenced entity must be processed first. Entity files are processed in the order they are passed, but you can use `entityDependencies` in `config.yaml` to make the ordering explicit:
+
+```yaml
+entityDependencies:
+  items: ["users"]
+```
+
 ### YAML Format
 
 YAML provides a more readable alternative:

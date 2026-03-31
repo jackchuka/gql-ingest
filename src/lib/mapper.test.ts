@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { DataMapper } from "./mapper";
+import { DataMapper, OutputStore } from "./mapper";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { MetricsCollector } from "./metrics";
 import { Logger } from "./logger";
@@ -325,6 +325,231 @@ describe("DataMapper", () => {
     it("should expose metrics through getMetrics method", () => {
       const metrics = dataMapper.getMetrics();
       expect(metrics).toBe(mockMetrics);
+    });
+
+    it("should resolve $ref mapping with a pre-populated outputStore", async () => {
+      const mockConfig = {
+        name: "BusinessPartner",
+        dataFile: "data.jsonl",
+        graphqlFile: "mutation.graphql",
+        mapping: {
+          name: "$.name",
+          companyId: { $ref: "Company", key: "$.companyRef", field: "id" },
+        },
+      };
+
+      const mockData = [{ name: "Partner A", companyRef: "Acme Corp" }];
+
+      const mockMutation =
+        "mutation CreateBP($name: String!, $companyId: String!) { createBP(input: { name: $name, companyId: $companyId }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockData);
+
+      executeMutation.mockResolvedValue({ createBP: { id: "bp-1" } });
+
+      // Pre-populate outputStore
+      const outputStore: OutputStore = new Map();
+      outputStore.set("Company", new Map([["Acme Corp", { id: "company-uuid-123" }]]));
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/bp/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      expect(executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          name: "Partner A",
+          companyId: "company-uuid-123",
+        },
+        undefined,
+        undefined,
+      );
+    });
+
+    it("should skip the row as a failure when $ref lookup fails", async () => {
+      const mockConfig = {
+        name: "BusinessPartner",
+        dataFile: "data.jsonl",
+        graphqlFile: "mutation.graphql",
+        mapping: {
+          name: "$.name",
+          companyId: { $ref: "Company", key: "$.companyRef", field: "id" },
+        },
+      };
+
+      const mockData = [{ name: "Partner A", companyRef: "NonExistent Corp" }];
+
+      const mockMutation =
+        "mutation CreateBP($name: String!, $companyId: String!) { createBP(input: { name: $name, companyId: $companyId }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockData);
+
+      // outputStore with Company but without the key "NonExistent Corp"
+      const outputStore: OutputStore = new Map();
+      outputStore.set("Company", new Map([["Acme Corp", { id: "company-uuid-123" }]]));
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/bp/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      // Mutation should not be called — the row is skipped as a failure
+      expect(executeMutation).not.toHaveBeenCalled();
+
+      // Error should be logged
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to create entity for row 1"),
+        expect.anything(),
+        expect.any(Error),
+      );
+    });
+
+    it("should capture output from mutation response when outputCapture is configured", async () => {
+      const mockConfig = {
+        name: "Company",
+        dataFile: "data.jsonl",
+        graphqlFile: "mutation.graphql",
+        outputCapture: {
+          key: "$.legalName",
+          fields: { id: "$.createCompany.id" },
+        },
+        mapping: {
+          legalName: "$.legalName",
+        },
+      };
+
+      const mockData = [{ legalName: "Acme Corp" }, { legalName: "Beta Inc" }];
+
+      const mockMutation =
+        "mutation CreateCompany($legalName: String!) { createCompany(input: { legalName: $legalName }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockData);
+
+      executeMutation
+        .mockResolvedValueOnce({ createCompany: { id: "uuid-acme" } })
+        .mockResolvedValueOnce({ createCompany: { id: "uuid-beta" } });
+
+      const outputStore: OutputStore = new Map();
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/company/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      // Verify the output store was populated
+      expect(outputStore.get("Company")?.get("Acme Corp")).toEqual({ id: "uuid-acme" });
+      expect(outputStore.get("Company")?.get("Beta Inc")).toEqual({ id: "uuid-beta" });
+    });
+
+    it("should support end-to-end: entity A captures output, entity B resolves $ref", async () => {
+      const outputStore: OutputStore = new Map();
+
+      // --- Process Entity A (Company) ---
+      const companyConfig = {
+        name: "Company",
+        dataFile: "data.jsonl",
+        graphqlFile: "mutation.graphql",
+        outputCapture: {
+          key: "$.legalName",
+          fields: { id: "$.createCompany.id" },
+        },
+        mapping: {
+          legalName: "$.legalName",
+        },
+      };
+
+      const companyData = [{ legalName: "Acme Corp" }];
+      const companyMutation =
+        "mutation CreateCompany($legalName: String!) { createCompany(input: { legalName: $legalName }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(companyConfig))
+        .mockReturnValueOnce(companyMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(companyData);
+
+      executeMutation.mockResolvedValueOnce({ createCompany: { id: "uuid-acme" } });
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/company/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      // --- Process Entity B (BusinessPartner) ---
+      const bpConfig = {
+        name: "BusinessPartner",
+        dataFile: "data.jsonl",
+        graphqlFile: "mutation.graphql",
+        mapping: {
+          name: "$.name",
+          companyId: { $ref: "Company", key: "$.companyRef", field: "id" },
+        },
+      };
+
+      const bpData = [{ name: "Partner A", companyRef: "Acme Corp" }];
+      const bpMutation =
+        "mutation CreateBP($name: String!, $companyId: String!) { createBP(input: { name: $name, companyId: $companyId }) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(bpConfig))
+        .mockReturnValueOnce(bpMutation);
+
+      DataReaderFactory.getReader().readFile.mockResolvedValue(bpData);
+
+      executeMutation.mockResolvedValueOnce({ createBP: { id: "bp-1" } });
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/bp/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      // Entity B should have resolved the $ref to Company's captured id
+      expect(executeMutation).toHaveBeenLastCalledWith(
+        bpMutation,
+        {
+          name: "Partner A",
+          companyId: "uuid-acme",
+        },
+        undefined,
+        undefined,
+      );
     });
 
     it("should convert numeric types from CSV strings to proper GraphQL types", async () => {
