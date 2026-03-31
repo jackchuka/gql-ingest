@@ -31,12 +31,16 @@ export function loadConfig(
 
   try {
     const content = fs.readFileSync(configFile, "utf-8");
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
     const yamlConfig = yaml.load(content) as Partial<Config>;
     logger.info(`Loaded config from ${configFile}`);
     return mergeWithDefaults(yamlConfig);
   } catch (error) {
     const isNotFound =
-      error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT";
+      error instanceof Error &&
+      "code" in error &&
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      (error as NodeJS.ErrnoException).code === "ENOENT";
     if (isNotFound) {
       logger.info(`Config file not found at ${configFile}, using defaults`);
     } else {
