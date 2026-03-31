@@ -552,6 +552,179 @@ describe("DataMapper", () => {
       );
     });
 
+    it("should resolve data-level $ref objects embedded inside data values", async () => {
+      const mockConfig = {
+        name: "orders",
+        dataFile: "data.json",
+        dataFormat: "json",
+        graphqlFile: "mutation.graphql",
+        mapping: {
+          input: "$",
+        },
+      };
+
+      const mockData = [
+        {
+          orderNumber: "ORD-001",
+          lines: [
+            { sku: "ITEM-A", itemId: { $ref: "items", key: "ITEM-A", field: "id" } },
+            { sku: "ITEM-B", itemId: { $ref: "items", key: "ITEM-B", field: "id" } },
+          ],
+        },
+      ];
+
+      const mockMutation =
+        "mutation CreateOrder($input: OrderInput!) { createOrder(input: $input) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockData);
+
+      executeMutation.mockResolvedValue({ createOrder: { id: "order-1" } });
+
+      const outputStore: OutputStore = new Map();
+      outputStore.set(
+        "items",
+        new Map([
+          ["ITEM-A", { id: "uuid-item-a" }],
+          ["ITEM-B", { id: "uuid-item-b" }],
+        ]),
+      );
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/orders/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      expect(executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          input: {
+            orderNumber: "ORD-001",
+            lines: [
+              { sku: "ITEM-A", itemId: "uuid-item-a" },
+              { sku: "ITEM-B", itemId: "uuid-item-b" },
+            ],
+          },
+        },
+        undefined,
+        undefined,
+      );
+    });
+
+    it("should return original data unchanged when no $ref objects exist in data values", async () => {
+      const mockConfig = {
+        name: "products",
+        dataFile: "data.json",
+        dataFormat: "json",
+        graphqlFile: "mutation.graphql",
+        mapping: {
+          input: "$",
+        },
+      };
+
+      const mockData = [{ name: "Widget", price: 9.99, tags: ["sale", "new"] }];
+
+      const mockMutation =
+        "mutation CreateProduct($input: ProductInput!) { createProduct(input: $input) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockData);
+
+      executeMutation.mockResolvedValue({ createProduct: { id: "prod-1" } });
+
+      const outputStore: OutputStore = new Map();
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/products/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      // Data should pass through unchanged — no $ref to resolve
+      expect(executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        { input: { name: "Widget", price: 9.99, tags: ["sale", "new"] } },
+        undefined,
+        undefined,
+      );
+    });
+
+    it("should warn and use undefined for failed data-level $ref lookups", async () => {
+      const mockConfig = {
+        name: "orders",
+        dataFile: "data.json",
+        dataFormat: "json",
+        graphqlFile: "mutation.graphql",
+        mapping: {
+          input: "$",
+        },
+      };
+
+      const mockData = [
+        {
+          orderNumber: "ORD-001",
+          lines: [{ sku: "MISSING", itemId: { $ref: "items", key: "MISSING", field: "id" } }],
+        },
+      ];
+
+      const mockMutation =
+        "mutation CreateOrder($input: OrderInput!) { createOrder(input: $input) { id } }";
+
+      mockFs.readFileSync
+        .mockReturnValueOnce(JSON.stringify(mockConfig))
+        .mockReturnValueOnce(mockMutation);
+
+      const { DataReaderFactory } = require("../readers");
+      DataReaderFactory.getReader().readFile.mockResolvedValue(mockData);
+
+      executeMutation.mockResolvedValue({ createOrder: { id: "order-1" } });
+
+      const outputStore: OutputStore = new Map();
+      outputStore.set("items", new Map([["ITEM-A", { id: "uuid-item-a" }]]));
+
+      await dataMapper.processEntityWithEvents(
+        "configs/test/orders/entity.json",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        outputStore,
+      );
+
+      // Data-level $ref failure is a soft warning, not a row-level error
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('$ref key "MISSING" not found'),
+      );
+
+      // Mutation still called with undefined for the unresolved ref
+      expect(executeMutation).toHaveBeenCalledWith(
+        mockMutation,
+        {
+          input: {
+            orderNumber: "ORD-001",
+            lines: [{ sku: "MISSING", itemId: undefined }],
+          },
+        },
+        undefined,
+        undefined,
+      );
+    });
+
     it("should convert numeric types from CSV strings to proper GraphQL types", async () => {
       const mockConfig = {
         name: "products",
