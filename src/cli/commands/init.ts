@@ -76,10 +76,8 @@ export function registerInitCommand(program: Command): void {
         logger.info(`Initialized gql-ingest configuration at: ${resolvedPath}`);
         logger.info("");
         logger.info("Next steps:");
-        logger.info("  1. Edit data files in data/");
-        logger.info("  2. Define GraphQL mutations in graphql/");
-        logger.info("  3. Configure mappings in mappings/");
-        logger.info(`  4. Run: gql-ingest -e <endpoint> -c ${resolvedPath}`);
+        logger.info("  1. Edit entity files in each entity directory");
+        logger.info(`  2. Run: gql-ingest -e <endpoint> ${resolvedPath}/example/entity.json`);
       } catch (error) {
         if (error instanceof Error && error.name === "ExitPromptError") {
           // User cancelled the prompt

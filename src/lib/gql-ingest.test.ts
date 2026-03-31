@@ -3,12 +3,15 @@ import { Logger } from "./logger";
 import { ProcessingMetrics } from "./metrics";
 
 // Mock dependencies
+jest.mock("fs");
 jest.mock("./graphql-client");
 jest.mock("./mapper");
 jest.mock("./metrics");
 jest.mock("./dependency-resolver");
 jest.mock("./config");
 
+import fs from "fs";
+import path from "path";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
 import { MetricsCollector } from "./metrics";
@@ -32,8 +35,6 @@ describe("GQLIngest", () => {
   let mockClientInstance: jest.Mocked<GraphQLClientWrapper>;
   let mockResolverInstance: jest.Mocked<DependencyResolver>;
 
-  // Store mock functions separately to avoid unbound-method lint warnings
-  let discoverMappingsMock: jest.Mock;
   let processEntityMock: jest.Mock;
   let finishProcessingMock: jest.Mock;
 
@@ -77,7 +78,6 @@ describe("GQLIngest", () => {
     };
 
     // Setup mock functions
-    discoverMappingsMock = jest.fn();
     processEntityMock = jest.fn();
     finishProcessingMock = jest.fn();
 
@@ -104,7 +104,6 @@ describe("GQLIngest", () => {
 
     // Setup DataMapper mock
     mockMapperInstance = {
-      discoverMappings: discoverMappingsMock,
       processEntityWithEvents: processEntityMock,
       getMetrics: jest.fn(),
     } as any;
@@ -123,6 +122,18 @@ describe("GQLIngest", () => {
     mockLoadConfig.mockReturnValue(defaultConfig);
     mockGetEntityConfig.mockReturnValue(defaultConfig.parallelProcessing);
     mockGetRetryConfig.mockReturnValue(defaultConfig.retry);
+
+    // Mock fs.readFileSync to return entity configs with name fields
+    const mockFs = fs as jest.Mocked<typeof fs>;
+    mockFs.readFileSync.mockImplementation((filePath: any) => {
+      const dir = path.basename(path.dirname(String(filePath)));
+      return JSON.stringify({
+        name: dir,
+        dataFile: `${dir}.csv`,
+        graphqlFile: `${dir}.graphql`,
+        mapping: {},
+      });
+    });
   });
 
   describe("constructor", () => {
@@ -190,12 +201,7 @@ describe("GQLIngest", () => {
   });
 
   describe("ingest", () => {
-    it("should successfully ingest data from config path", async () => {
-      discoverMappingsMock.mockReturnValue([
-        "/path/mappings/users.json",
-        "/path/mappings/orders.json",
-      ]);
-
+    it("should successfully ingest entity files", async () => {
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users", "orders"] },
       ]);
@@ -203,62 +209,32 @@ describe("GQLIngest", () => {
       mockResolverInstance.validateDependencies.mockReturnValue([]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
+      const result = await ingest.ingest(["/path/users/entity.json", "/path/orders/entity.json"]);
 
       expect(result.success).toBe(true);
       expect(result.metrics).toEqual(defaultMetrics);
       expect(result.errors).toBeUndefined();
-      expect(mockLoadConfig).toHaveBeenCalledWith("/path/to/config", mockLogger);
+      expect(mockLoadConfig).toHaveBeenCalledWith(undefined, mockLogger);
     });
 
-    it("should return error when no mapping files found", async () => {
-      discoverMappingsMock.mockReturnValue([]);
-
+    it("should return error when no entity files provided", async () => {
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
+      const result = await ingest.ingest([]);
 
       expect(result.success).toBe(false);
       expect(result.errors).toEqual(
-        expect.arrayContaining([expect.stringContaining("No mapping files found")]),
+        expect.arrayContaining([expect.stringContaining("No entity files provided")]),
       );
       expect(mockLogger.warn).toHaveBeenCalled();
     });
 
-    it("should filter entities when entities option is provided as array", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
-      mockResolverInstance.resolveExecutionOrder.mockReturnValue([
-        { wave: 0, entities: ["users"] },
-      ]);
-
-      const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config", { entities: ["users"] });
-
-      expect(discoverMappingsMock).toHaveBeenCalledWith("/path/to/config", ["users"]);
-    });
-
-    it("should filter entities when entities option is provided as comma-separated string", async () => {
-      discoverMappingsMock.mockReturnValue([
-        "/path/mappings/users.json",
-        "/path/mappings/orders.json",
-      ]);
-      mockResolverInstance.resolveExecutionOrder.mockReturnValue([
-        { wave: 0, entities: ["users", "orders"] },
-      ]);
-
-      const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config", { entities: "users, orders" });
-
-      expect(discoverMappingsMock).toHaveBeenCalledWith("/path/to/config", ["users", "orders"]);
-    });
-
     it("should use format override from ingest options", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
 
       const ingest = new GQLIngest(defaultOptions);
-      await ingest.ingest("/path/to/config", { format: "yaml" });
+      await ingest.ingest(["/path/users/entity.json"], { format: "yaml" });
 
       // The second DataMapper instantiation (in ingest) should use the format
       expect(MockDataMapper).toHaveBeenLastCalledWith(
@@ -270,14 +246,13 @@ describe("GQLIngest", () => {
       );
     });
 
-    it("should return errors when dependency validation fails without entity filter", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
+    it("should return errors when dependency validation fails", async () => {
       mockResolverInstance.validateDependencies.mockReturnValue([
         "Entity 'orders' depends on 'users' which is not in the entity list",
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       expect(result.success).toBe(false);
       expect(result.errors).toContain(
@@ -286,44 +261,23 @@ describe("GQLIngest", () => {
       expect(mockLogger.error).toHaveBeenCalled();
     });
 
-    it("should warn but continue when dependency validation fails with entity filter", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
-      mockResolverInstance.validateDependencies.mockReturnValue(["Missing dependency warning"]);
+    it("should handle exceptions during ingestion", async () => {
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
+      processEntityMock.mockRejectedValue(new Error("Unexpected error"));
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config", {
-        entities: ["users"],
-      });
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
+      // Entity-level errors are caught per-entity, so this still succeeds
       expect(result.success).toBe(true);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Warning: Dependency validation issues"),
+        expect.stringContaining("Warning: Could not process"),
       );
     });
 
-    it("should handle exceptions during ingestion", async () => {
-      discoverMappingsMock.mockImplementation(() => {
-        throw new Error("Unexpected error");
-      });
-
-      const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
-
-      expect(result.success).toBe(false);
-      expect(result.errors).toContain("Unexpected error");
-      expect(mockLogger.error).toHaveBeenCalledWith("Error: Unexpected error");
-    });
-
     it("should process entities in dependency waves", async () => {
-      discoverMappingsMock.mockReturnValue([
-        "/path/mappings/users.json",
-        "/path/mappings/orders.json",
-        "/path/mappings/payments.json",
-      ]);
-
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
         { wave: 1, entities: ["orders", "payments"] },
@@ -338,7 +292,11 @@ describe("GQLIngest", () => {
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config");
+      await ingest.ingest([
+        "/path/users/entity.json",
+        "/path/orders/entity.json",
+        "/path/payments/entity.json",
+      ]);
 
       expect(mockLogger.info).toHaveBeenCalledWith("Processing 2 dependency waves...");
       expect(mockLogger.info).toHaveBeenCalledWith("Wave 1: Processing entities [users]");
@@ -348,26 +306,24 @@ describe("GQLIngest", () => {
     });
 
     it("should call finishProcessing on metrics collector after successful ingest", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config");
+      await ingest.ingest(["/path/users/entity.json"]);
 
       expect(finishProcessingMock).toHaveBeenCalled();
     });
 
     it("should handle entity processing errors gracefully", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
       processEntityMock.mockRejectedValue(new Error("Processing failed"));
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       // Should still succeed overall as errors are caught per-entity
       expect(result.success).toBe(true);
@@ -375,21 +331,16 @@ describe("GQLIngest", () => {
         expect.stringContaining("Warning: Could not process"),
       );
     });
-  });
 
-  describe("ingestEntities", () => {
-    it("should call ingest with entities option", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
+    it("should pass config option to loadConfig", async () => {
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingestEntities("/path/to/config", ["users", "orders"]);
+      await ingest.ingest(["/path/users/entity.json"], { config: "/path/config.yaml" });
 
-      expect(discoverMappingsMock).toHaveBeenCalledWith("/path/to/config", ["users", "orders"]);
-      expect(result).toHaveProperty("success");
-      expect(result).toHaveProperty("metrics");
+      expect(mockLoadConfig).toHaveBeenCalledWith("/path/config.yaml", mockLogger);
     });
   });
 
@@ -508,7 +459,6 @@ Processing Complete:
 
   describe("dependency resolution", () => {
     it("should filter dependencies to only relevant entities", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/orders.json"]);
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["orders"] },
       ]);
@@ -523,21 +473,13 @@ Processing Complete:
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config", { entities: ["orders"] });
+      await ingest.ingest(["/path/orders/entity.json"]);
 
-      // DependencyResolver should only receive dependencies for the filtered entities
-      expect(MockDependencyResolver).toHaveBeenCalledWith(
-        ["orders"],
-        { orders: ["users"] }, // Only orders dependency, not payments or shipments
-        true, // allowPartialResolution = true because entity filter is set
-      );
+      // DependencyResolver should only receive dependencies for the provided entities
+      expect(MockDependencyResolver).toHaveBeenCalledWith(["orders"], { orders: ["users"] }, false);
     });
 
-    it("should pass allowPartialResolution=false when no entity filter", async () => {
-      discoverMappingsMock.mockReturnValue([
-        "/path/mappings/users.json",
-        "/path/mappings/orders.json",
-      ]);
+    it("should pass allowPartialResolution=false", async () => {
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
         { wave: 1, entities: ["orders"] },
@@ -551,25 +493,18 @@ Processing Complete:
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config");
+      await ingest.ingest(["/path/users/entity.json", "/path/orders/entity.json"]);
 
       expect(MockDependencyResolver).toHaveBeenCalledWith(
         ["users", "orders"],
         { orders: ["users"] },
-        false, // allowPartialResolution = false
+        false,
       );
     });
   });
 
   describe("entity concurrency", () => {
     it("should respect entityConcurrency configuration", async () => {
-      discoverMappingsMock.mockReturnValue([
-        "/path/mappings/entity1.json",
-        "/path/mappings/entity2.json",
-        "/path/mappings/entity3.json",
-        "/path/mappings/entity4.json",
-      ]);
-
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["entity1", "entity2", "entity3", "entity4"] },
       ]);
@@ -578,12 +513,17 @@ Processing Complete:
         ...defaultConfig,
         parallelProcessing: {
           ...defaultConfig.parallelProcessing,
-          entityConcurrency: 2, // Process 2 entities at a time
+          entityConcurrency: 2,
         },
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest("/path/to/config");
+      await ingest.ingest([
+        "/path/entity1/entity.json",
+        "/path/entity2/entity.json",
+        "/path/entity3/entity.json",
+        "/path/entity4/entity.json",
+      ]);
 
       // All 4 entities should be processed
       expect(processEntityMock).toHaveBeenCalledTimes(4);
@@ -592,19 +532,22 @@ Processing Complete:
 
   describe("edge cases", () => {
     it("should handle non-Error exceptions", async () => {
-      discoverMappingsMock.mockImplementation(() => {
+      mockResolverInstance.resolveExecutionOrder.mockReturnValue([
+        { wave: 0, entities: ["users"] },
+      ]);
+      processEntityMock.mockImplementation(() => {
         throw "String error"; // Non-Error exception
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
-      expect(result.success).toBe(false);
-      expect(result.errors).toContain("String error");
+      // Per-entity errors are caught, so overall still succeeds
+      expect(result.success).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("String error"));
     });
 
     it("should reset metrics for each ingest call", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
@@ -612,10 +555,10 @@ Processing Complete:
       const ingest = new GQLIngest(defaultOptions);
 
       // First ingest
-      await ingest.ingest("/path/to/config");
+      await ingest.ingest(["/path/users/entity.json"]);
 
       // Second ingest
-      await ingest.ingest("/path/to/config");
+      await ingest.ingest(["/path/users/entity.json"]);
 
       // MetricsCollector should be instantiated for each ingest call
       // (once in constructor + twice for ingest calls)
@@ -623,18 +566,17 @@ Processing Complete:
     });
 
     it("should handle empty entity dependencies", async () => {
-      discoverMappingsMock.mockReturnValue(["/path/mappings/users.json"]);
       mockResolverInstance.resolveExecutionOrder.mockReturnValue([
         { wave: 0, entities: ["users"] },
       ]);
 
       mockLoadConfig.mockReturnValue({
         ...defaultConfig,
-        entityDependencies: {}, // Empty dependencies
+        entityDependencies: {},
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest("/path/to/config");
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       expect(result.success).toBe(true);
       expect(MockDependencyResolver).toHaveBeenCalledWith(["users"], {}, false);

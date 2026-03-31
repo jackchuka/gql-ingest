@@ -6,7 +6,6 @@ jest.mock("fs");
 const mockFs = fs as jest.Mocked<typeof fs>;
 
 describe("Configuration", () => {
-  const testConfigDir = "/test/config";
   let mockLogger: jest.Mocked<Logger>;
 
   beforeEach(() => {
@@ -23,18 +22,14 @@ describe("Configuration", () => {
   });
 
   describe("loadConfig", () => {
-    it("should return default config when no config.yaml exists", () => {
-      mockFs.existsSync.mockReturnValue(false);
-
-      const config = loadConfig(testConfigDir, mockLogger);
+    it("should return default config when no config file provided", () => {
+      const config = loadConfig(undefined, mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        "No config.yaml found, using default sequential processing",
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith("No config file provided, using defaults");
     });
 
-    it("should load and merge YAML configuration", () => {
+    it("should load and merge YAML configuration from file path", () => {
       const yamlContent = `
 parallelProcessing:
   concurrency: 5
@@ -49,10 +44,9 @@ entityDependencies:
   products: ["users"]
 `;
 
-      mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue(yamlContent);
 
-      const config = loadConfig(testConfigDir);
+      const config = loadConfig("/path/to/config.yaml");
 
       expect(config.parallelProcessing.concurrency).toBe(5);
       expect(config.parallelProcessing.entityConcurrency).toBe(3);
@@ -70,41 +64,48 @@ entityConfig:
     concurrency: 20
 `;
 
-      mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue(yamlContent);
 
-      const config = loadConfig(testConfigDir);
+      const config = loadConfig("/path/to/config.yaml");
 
-      // Should merge with defaults
       expect(config.parallelProcessing.concurrency).toBe(10);
       expect(config.parallelProcessing.entityConcurrency).toBe(1); // default
       expect(config.parallelProcessing.preserveRowOrder).toBe(true); // default
     });
 
     it("should handle invalid YAML gracefully", () => {
-      mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue("invalid: yaml: content: [");
 
-      const config = loadConfig(testConfigDir, mockLogger);
+      const config = loadConfig("/path/to/config.yaml", mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Warning: Failed to parse config.yaml"),
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to parse"));
+    });
+
+    it("should return defaults when config file does not exist", () => {
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      mockFs.readFileSync.mockImplementation(() => {
+        throw err;
+      });
+
+      const config = loadConfig("/nonexistent/config.yaml", mockLogger);
+
+      expect(config).toEqual(DEFAULT_CONFIG);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        "Config file not found at /nonexistent/config.yaml, using defaults",
       );
     });
 
     it("should handle file read errors gracefully", () => {
-      mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockImplementation(() => {
-        throw new Error("File read error");
+        throw new Error("Permission denied");
       });
 
-      const config = loadConfig(testConfigDir, mockLogger);
+      const config = loadConfig("/path/to/config.yaml", mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Warning: Failed to parse config.yaml"),
-      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to parse"));
     });
   });
 

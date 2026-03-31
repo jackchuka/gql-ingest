@@ -1,8 +1,0 @@
-{
-  "dataFile": "data/products.yaml",
-  "dataFormat": "yaml",
-  "graphqlFile": "graphql/newProduct.graphql",
-  "mapping": {
-    "input": "$"
-  }
-}

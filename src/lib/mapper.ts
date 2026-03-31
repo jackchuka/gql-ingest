@@ -14,10 +14,8 @@ import {
 } from "./events";
 
 export interface MappingConfig {
-  // Legacy CSV support
-  csvFile?: string;
-  // New flexible data file support
-  dataFile?: string;
+  name: string;
+  dataFile: string;
   dataFormat?: string;
   graphqlFile: string;
   mapping: Record<string, unknown>;
@@ -54,47 +52,6 @@ export class DataMapper {
     this.formatOverride = formatOverride;
   }
 
-  discoverMappings(configDir: string, entityFilter?: string[]): string[] {
-    const mappingsPath = path.resolve(this.basePath, configDir, "mappings");
-
-    try {
-      const files = fs.readdirSync(mappingsPath);
-      let jsonFiles = files.filter((file) => file.endsWith(".json"));
-
-      // Apply entity filter if provided
-      if (entityFilter && entityFilter.length > 0) {
-        const requestedEntities = new Set(entityFilter);
-        const foundEntities = new Set<string>();
-
-        jsonFiles = jsonFiles.filter((file) => {
-          const entityName = path.basename(file, ".json");
-          if (requestedEntities.has(entityName)) {
-            foundEntities.add(entityName);
-            return true;
-          }
-          return false;
-        });
-
-        // Check for requested entities that were not found
-        const notFound = entityFilter.filter((e) => !foundEntities.has(e));
-        if (notFound.length > 0) {
-          this.logger.warn(
-            `Warning: The following entities were not found in mappings: ${notFound.join(", ")}`,
-          );
-        }
-      }
-
-      jsonFiles.sort(); // Alphabetical order for consistent processing
-
-      this.logger.info(`Discovered ${jsonFiles.length} mapping files: ${jsonFiles.join(", ")}`);
-      return jsonFiles.map((file) => path.join(configDir, "mappings", file));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error reading mappings directory ${mappingsPath}: ${message}`);
-      return [];
-    }
-  }
-
   /**
    * Process an entity (backward-compatible method)
    */
@@ -116,34 +73,27 @@ export class DataMapper {
     signal?: AbortSignal,
     callbacks?: EntityProcessingCallbacks,
   ): Promise<void> {
-    const entityName = path.basename(configPath, ".json");
     const entityStartTime = Date.now();
 
-    this.logger.info(`Processing entity: ${configPath}`);
-    this.metrics.startEntityProcessing(entityName);
-
-    // Read mapping configuration
+    // Read entity configuration
     const configFullPath = path.resolve(this.basePath, configPath);
     const config: MappingConfig = JSON.parse(fs.readFileSync(configFullPath, "utf8"));
+    const entityName = config.name;
 
-    // Extract config directory (parent of mappings directory)
-    const configDir = path.dirname(path.dirname(configFullPath));
+    this.logger.info(`Processing entity: ${entityName}`);
+    this.metrics.startEntityProcessing(entityName);
 
-    // Determine data file path (support both legacy csvFile and new dataFile)
-    const dataFile = config.dataFile || config.csvFile;
-    if (!dataFile) {
-      throw new Error(`No data file specified in mapping config: ${configPath}`);
-    }
+    // Resolve paths relative to entity file directory
+    const entityDir = path.dirname(configFullPath);
 
-    const dataPath = path.resolve(configDir, dataFile);
+    const dataPath = path.resolve(entityDir, config.dataFile);
 
     // Get appropriate reader (prioritize CLI format override, then config format)
     const format = this.formatOverride || config.dataFormat;
     const reader = DataReaderFactory.getReader(dataPath, format);
     const data = await reader.readFile(dataPath);
 
-    // Read GraphQL mutation (relative to config directory)
-    const graphqlPath = path.resolve(configDir, config.graphqlFile);
+    const graphqlPath = path.resolve(entityDir, config.graphqlFile);
     const mutation = fs.readFileSync(graphqlPath, "utf8");
 
     // Emit entityStart event
@@ -399,8 +349,8 @@ export class DataMapper {
       }
       // Handle path-based mapping for nested data (e.g., "input.name": "$.product.name")
       else if (typeof mappingValue === "string" && mappingValue.startsWith("$.")) {
-        const path = mappingValue.substring(2); // Remove '$.'
-        const value = this.getValueByPath(row, path);
+        const dataPath = mappingValue.substring(2); // Remove '$.'
+        const value = this.getValueByPath(row, dataPath);
         if (value !== undefined) {
           const type = variableTypes[graphqlVar];
           variables[graphqlVar] = this.convertValue(value, type, graphqlVar);
@@ -421,8 +371,8 @@ export class DataMapper {
     return variables;
   }
 
-  private getValueByPath(obj: any, path: string): any {
-    const parts = path.split(".");
+  private getValueByPath(obj: any, dataPath: string): any {
+    const parts = dataPath.split(".");
     let current = obj;
 
     for (const part of parts) {
@@ -449,8 +399,8 @@ export class DataMapper {
       const result: any = {};
       for (const [key, value] of Object.entries(mappingObj)) {
         if (typeof value === "string" && value.startsWith("$.")) {
-          const path = value.substring(2);
-          let fieldValue = this.getValueByPath(row, path);
+          const dataPath = value.substring(2);
+          let fieldValue = this.getValueByPath(row, dataPath);
 
           // Handle special case for array fields (e.g., comma-separated values)
           if (key === "values" && typeof fieldValue === "string" && fieldValue.includes(",")) {

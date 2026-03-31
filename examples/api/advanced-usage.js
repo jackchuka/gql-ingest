@@ -15,14 +15,16 @@ import {
   getEntityConfig,
   getRetryConfig,
 } from "@jackchuka/gql-ingest";
-import { basename } from "path";
+import { basename, dirname } from "path";
 
 async function customIngestionPipeline() {
   const endpoint = "https://your-graphql-api.com/graphql";
   const headers = {
     Authorization: "Bearer YOUR_TOKEN",
   };
-  const configPath = "./config";
+
+  // Entity files to process (colocated layout)
+  const entityFiles = ["./users/entity.json", "./products/entity.json"];
 
   // Step 1: Initialize components
   console.log("Initializing components...");
@@ -30,16 +32,13 @@ async function customIngestionPipeline() {
   const client = new GraphQLClientWrapper(endpoint, headers, metrics, true);
   const mapper = new DataMapper(client, process.cwd(), metrics, true);
 
-  // Step 2: Load and validate configuration
+  // Step 2: Load configuration for retry/parallelism settings
   console.log("Loading configuration...");
-  const config = loadConfig(configPath);
+  const config = loadConfig("./config.yaml");
 
-  // Step 3: Discover available mappings
-  const mappingPaths = mapper.discoverMappings(configPath);
-  console.log(`Found ${mappingPaths.length} mapping files`);
-
-  // Step 4: Extract entity names and set up dependencies
-  const entityNames = mappingPaths.map((path) => basename(path, ".json"));
+  // Step 3: Extract entity names from file paths
+  const entityNames = entityFiles.map((path) => basename(dirname(path)));
+  console.log(`Processing ${entityFiles.length} entity files`);
 
   const dependencies = {};
   if (config.entityDependencies) {
@@ -50,7 +49,7 @@ async function customIngestionPipeline() {
     }
   }
 
-  // Step 5: Resolve execution order
+  // Step 4: Resolve execution order
   const resolver = new DependencyResolver(entityNames, dependencies);
   const validationErrors = resolver.validateDependencies();
 
@@ -62,15 +61,15 @@ async function customIngestionPipeline() {
   const waves = resolver.resolveExecutionOrder();
   console.log(`Will process entities in ${waves.length} waves`);
 
-  // Step 6: Custom processing logic
+  // Step 5: Custom processing logic
   for (const wave of waves) {
     console.log(`\nWave ${wave.wave + 1}: ${wave.entities.join(", ")}`);
 
     // Process entities with custom error handling and logging
     for (const entityName of wave.entities) {
-      const mappingPath = mappingPaths.find((p) => basename(p, ".json") === entityName);
+      const entityFile = entityFiles.find((p) => basename(dirname(p)) === entityName);
 
-      if (!mappingPath) continue;
+      if (!entityFile) continue;
 
       try {
         console.log(`  Processing ${entityName}...`);
@@ -85,29 +84,18 @@ async function customIngestionPipeline() {
         console.log(`  - Max retries: ${retryConfig.maxAttempts}`);
 
         // Process the entity
-        await mapper.processEntity(mappingPath, entityConfig, retryConfig);
+        await mapper.processEntity(entityFile, entityConfig, retryConfig);
 
         // Custom post-processing
         const entityMetrics = metrics.getEntityMetrics(entityName);
-        console.log(`  ✓ Completed: ${entityMetrics.rowsProcessed} rows`);
-
-        // You could add custom logic here, like:
-        // - Send notifications
-        // - Update external systems
-        // - Log to monitoring services
+        console.log(`  Completed: ${entityMetrics.rowsProcessed} rows`);
       } catch (error) {
-        console.error(`  ✗ Failed to process ${entityName}:`, error.message);
-
-        // Custom error recovery logic
-        // You might want to:
-        // - Retry with different settings
-        // - Skip and continue
-        // - Halt the entire process
+        console.error(`  Failed to process ${entityName}:`, error.message);
       }
     }
   }
 
-  // Step 7: Finalize and report
+  // Step 6: Finalize and report
   metrics.finishProcessing();
   console.log("\n" + metrics.generateSummary());
 }
@@ -120,19 +108,19 @@ class CustomGQLIngest {
     this.mapper = new DataMapper(this.client, process.cwd(), this.metrics);
   }
 
-  async ingestWithValidation(configPath, validator) {
+  async ingestWithValidation(entityFiles, validator) {
     // Custom validation before processing
-    const isValid = await validator.validate(configPath);
+    const isValid = await validator.validate(entityFiles);
     if (!isValid) {
       throw new Error("Validation failed");
     }
 
     // Continue with normal processing...
-    const config = loadConfig(configPath);
+    const config = loadConfig("./config.yaml");
     // ... rest of the ingestion logic
   }
 
-  async ingestWithTransform(configPath, transformer) {
+  async ingestWithTransform(entityFiles, transformer) {
     // Custom data transformation during processing
     // This would require extending the DataMapper class
     // to support transformation hooks
