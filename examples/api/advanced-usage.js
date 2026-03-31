@@ -15,7 +15,7 @@ import {
   getEntityConfig,
   getRetryConfig,
 } from "@jackchuka/gql-ingest";
-import { basename } from "path";
+import { basename, dirname } from "path";
 
 async function customIngestionPipeline() {
   const endpoint = "https://your-graphql-api.com/graphql";
@@ -24,10 +24,7 @@ async function customIngestionPipeline() {
   };
 
   // Entity files to process (colocated layout)
-  const entityFiles = [
-    "./users/users.json",
-    "./products/products.json",
-  ];
+  const entityFiles = ["./users/entity.json", "./products/entity.json"];
 
   // Step 1: Initialize components
   console.log("Initializing components...");
@@ -40,7 +37,7 @@ async function customIngestionPipeline() {
   const config = loadConfig("./config.yaml");
 
   // Step 3: Extract entity names from file paths
-  const entityNames = entityFiles.map((path) => basename(path, ".json"));
+  const entityNames = entityFiles.map((path) => basename(dirname(path)));
   console.log(`Processing ${entityFiles.length} entity files`);
 
   const dependencies = {};
@@ -70,7 +67,7 @@ async function customIngestionPipeline() {
 
     // Process entities with custom error handling and logging
     for (const entityName of wave.entities) {
-      const entityFile = entityFiles.find((p) => basename(p, ".json") === entityName);
+      const entityFile = entityFiles.find((p) => basename(dirname(p)) === entityName);
 
       if (!entityFile) continue;
 

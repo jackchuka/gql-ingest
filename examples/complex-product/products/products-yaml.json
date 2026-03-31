@@ -1,4 +1,5 @@
 {
+  "name": "products-yaml",
   "dataFile": "products-data.yaml",
   "dataFormat": "yaml",
   "graphqlFile": "newProduct.graphql",

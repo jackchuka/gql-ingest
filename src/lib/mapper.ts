@@ -14,10 +14,8 @@ import {
 } from "./events";
 
 export interface MappingConfig {
-  // Legacy CSV support
-  csvFile?: string;
-  // New flexible data file support
-  dataFile?: string;
+  name: string;
+  dataFile: string;
   dataFormat?: string;
   graphqlFile: string;
   mapping: Record<string, unknown>;
@@ -75,26 +73,20 @@ export class DataMapper {
     signal?: AbortSignal,
     callbacks?: EntityProcessingCallbacks,
   ): Promise<void> {
-    const entityName = path.basename(configPath, ".json");
     const entityStartTime = Date.now();
 
-    this.logger.info(`Processing entity: ${configPath}`);
-    this.metrics.startEntityProcessing(entityName);
-
-    // Read mapping configuration
+    // Read entity configuration
     const configFullPath = path.resolve(this.basePath, configPath);
     const config: MappingConfig = JSON.parse(fs.readFileSync(configFullPath, "utf8"));
+    const entityName = config.name;
+
+    this.logger.info(`Processing entity: ${entityName}`);
+    this.metrics.startEntityProcessing(entityName);
 
     // Resolve paths relative to entity file directory
     const entityDir = path.dirname(configFullPath);
 
-    // Determine data file path (support both legacy csvFile and new dataFile)
-    const dataFile = config.dataFile || config.csvFile;
-    if (!dataFile) {
-      throw new Error(`No data file specified in entity config: ${configPath}`);
-    }
-
-    const dataPath = path.resolve(entityDir, dataFile);
+    const dataPath = path.resolve(entityDir, config.dataFile);
 
     // Get appropriate reader (prioritize CLI format override, then config format)
     const format = this.formatOverride || config.dataFormat;

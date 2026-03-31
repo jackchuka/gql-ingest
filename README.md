@@ -28,7 +28,7 @@ A TypeScript library and CLI tool that reads data from multiple formats (CSV, JS
 npm install -g @jackchuka/gql-ingest
 
 # Or use with npx (no installation required)
-npx @jackchuka/gql-ingest -e <url> [-c config.yaml] entity1.json entity2.json
+npx @jackchuka/gql-ingest -e <url> [-c config.yaml] entity1/entity.json entity2/entity.json
 ```
 
 ### For Development
@@ -52,7 +52,7 @@ gql-ingest init ./my-project
 gql-ingest add users -p ./my-project -f json --fields "id,name,email"
 
 # Run ingestion
-gql-ingest -e https://your-api.com/graphql ./my-project/users/users.json
+gql-ingest -e https://your-api.com/graphql ./my-project/users/entity.json
 ```
 
 ## Usage
@@ -79,9 +79,9 @@ This creates:
 my-project/
 ├── config.yaml
 └── example/
+    ├── entity.json       # entity definition (name: "example")
     ├── example.csv
-    ├── example.graphql
-    └── example.json
+    └── example.graphql
 ```
 
 #### Add Entity
@@ -123,19 +123,19 @@ Options:
 # Basic usage — pass entity files as positional arguments
 gql-ingest \
   -e https://your-graphql-api.com/graphql \
-  ./examples/demo/items/items.json
+  ./examples/demo/items/entity.json
 
 # With authentication headers
 gql-ingest \
   -e https://your-graphql-api.com/graphql \
   -h '{"Authorization": "Bearer YOUR_TOKEN"}' \
-  ./examples/demo/users/users.json ./examples/demo/items/items.json
+  ./examples/demo/users/entity.json ./examples/demo/items/entity.json
 
 # With optional config for orchestration (retry, parallelism, dependencies)
 gql-ingest \
   -e https://your-graphql-api.com/graphql \
   -c ./examples/demo/config.yaml \
-  ./examples/demo/users/users.json ./examples/demo/items/items.json
+  ./examples/demo/users/entity.json ./examples/demo/items/entity.json
 ```
 
 ### Programmatic API
@@ -163,7 +163,7 @@ const client = new GQLIngest({
 });
 
 // Ingest all data from entity files
-const result = await client.ingest(["./users/users.json"]);
+const result = await client.ingest(["./users/entity.json"]);
 
 // Check if ingestion was successful
 if (result.success) {
@@ -178,10 +178,10 @@ if (result.success) {
 
 ```typescript
 // Process multiple entity files
-const result = await client.ingest(["./users/users.json", "./products/products.json"]);
+const result = await client.ingest(["./users/entity.json", "./products/entity.json"]);
 
 // With options
-const result = await client.ingest(["./users/users.json", "./products/products.json"], {
+const result = await client.ingest(["./users/entity.json", "./products/entity.json"], {
   format: "csv", // Optional: override format detection
 });
 ```
@@ -258,7 +258,7 @@ client.on("cancelled", (p) => console.log(`Cancelled: ${p.reason}`));
 // Handle graceful shutdown
 process.on("SIGINT", () => client.cancel("User interrupted"));
 
-await client.ingest(["./users/users.json"]);
+await client.ingest(["./users/entity.json"]);
 ```
 
 **Available Events:**
@@ -283,12 +283,12 @@ Cancel in-progress ingestion using the `cancel()` method or external AbortContro
 // Method 1: Using cancel()
 const client = new GQLIngest({ endpoint: "..." });
 process.on("SIGINT", () => client.cancel("User interrupted"));
-await client.ingest(["./users/users.json"]);
+await client.ingest(["./users/entity.json"]);
 
 // Method 2: Using external AbortController
 const controller = new AbortController();
 setTimeout(() => controller.abort("Timeout"), 60000);
-await client.ingest(["./users/users.json"], { signal: controller.signal });
+await client.ingest(["./users/entity.json"], { signal: controller.signal });
 ```
 
 #### TypeScript Support
@@ -391,8 +391,8 @@ entityConfig:
 
 Pass only the entity files you want to process as positional arguments:
 
-- Process multiple entities: `gql-ingest -e <url> users/users.json products/products.json`
-- Process a single entity: `gql-ingest -e <url> items/items.json`
+- Process multiple entities: `gql-ingest -e <url> users/entity.json products/entity.json`
+- Process a single entity: `gql-ingest -e <url> items/entity.json`
 - Entities are processed in dependency order automatically when `-c config.yaml` is provided
 - Missing dependencies will trigger a warning but not prevent execution
 
@@ -400,16 +400,17 @@ Pass only the entity files you want to process as positional arguments:
 
 ## Configuration
 
-Each entity is defined by a JSON file colocated with its data and GraphQL mutation files. Paths in the entity file resolve relative to the entity file's directory.
+Each entity is defined by an `entity.json` file colocated with its data and GraphQL mutation files. The entity name comes from the `name` field inside the file, not from the filename or directory name. Paths in the entity file resolve relative to the entity file's directory.
 
 The optional `-c` flag points to a `config.yaml` file for orchestration settings (retry, parallelism, dependencies).
 
 ### Example Configuration
 
-**examples/demo/items/items.json** (entity definition):
+**examples/demo/items/entity.json** (entity definition):
 
 ```json
 {
+  "name": "items",
   "dataFile": "items.csv",
   "dataFormat": "csv",
   "graphqlFile": "items.graphql",
@@ -485,10 +486,10 @@ The tool automatically detects the format based on file extension, or you can sp
 
 ```bash
 # Auto-detect from entity file configuration
-gql-ingest -e <url> ./items/items.json
+gql-ingest -e <url> ./items/entity.json
 
 # Force specific format
-gql-ingest -e <url> --format json ./items/items.json
+gql-ingest -e <url> --format json ./items/entity.json
 ```
 
 ### JSON/YAML Format Examples
@@ -528,10 +529,11 @@ For complex GraphQL mutations with nested input types, you can map the entire da
 ]
 ```
 
-**products/products.entity.json** (entity definition):
+**products/entity.json** (entity definition):
 
 ```json
 {
+  "name": "products",
   "dataFile": "products.json",
   "dataFormat": "json",
   "graphqlFile": "newProduct.graphql",
@@ -557,10 +559,11 @@ For transforming flat JSON into nested structures:
 ]
 ```
 
-**products/products.entity.json** (entity definition with path-based mapping):
+**products/entity.json** (entity definition with path-based mapping):
 
 ```json
 {
+  "name": "products",
   "dataFile": "products-flat.json",
   "graphqlFile": "newProduct.graphql",
   "mapping": {

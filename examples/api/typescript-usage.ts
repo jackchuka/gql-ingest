@@ -36,7 +36,7 @@ async function basicTypedUsage(): Promise<void> {
   };
 
   const result: IngestResult = await client.ingest(
-    ["./users/users.json", "./products/products.json"],
+    ["./users/entity.json", "./products/entity.json"],
     ingestOptions,
   );
 
@@ -80,11 +80,11 @@ class DataIngestionService {
   }
 
   async ingestUsers(): Promise<IngestResult> {
-    return this.client.ingest(["./users/users.json"], this.defaultOptions);
+    return this.client.ingest(["./users/entity.json"], this.defaultOptions);
   }
 
   async ingestProducts(): Promise<IngestResult> {
-    return this.client.ingest(["./products/products.json"], this.defaultOptions);
+    return this.client.ingest(["./products/entity.json"], this.defaultOptions);
   }
 
   async ingestWithRetry(entityFiles: string[], maxRetries: number = 3): Promise<IngestResult> {
@@ -123,7 +123,7 @@ async function robustIngestion(): Promise<void> {
 
   try {
     // Ingest users with retry logic
-    const userResult = await service.ingestWithRetry(["./users/users.json"]);
+    const userResult = await service.ingestWithRetry(["./users/entity.json"]);
 
     if (!userResult.success) {
       throw new Error(`Failed to ingest users: ${userResult.errors?.join(", ")}`);

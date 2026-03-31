@@ -26,9 +26,7 @@ describe("Configuration", () => {
       const config = loadConfig(undefined, mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        "No config file provided, using defaults",
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith("No config file provided, using defaults");
     });
 
     it("should load and merge YAML configuration from file path", () => {
@@ -81,9 +79,7 @@ entityConfig:
       const config = loadConfig("/path/to/config.yaml", mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to parse"),
-      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to parse"));
     });
 
     it("should return defaults when config file does not exist", () => {
@@ -109,9 +105,7 @@ entityConfig:
       const config = loadConfig("/path/to/config.yaml", mockLogger);
 
       expect(config).toEqual(DEFAULT_CONFIG);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to parse"),
-      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to parse"));
     });
   });
 

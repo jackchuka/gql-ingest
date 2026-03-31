@@ -161,9 +161,9 @@ export async function generateEntityFiles(
   );
 
   writeFile(
-    path.join(entityDir, `${entityName}.json`),
+    path.join(entityDir, "entity.json"),
     generateEntityDefFile(entityName, format, fields),
-    `${entityName}/${entityName}.json`,
+    `${entityName}/entity.json`,
   );
 }
 
@@ -214,6 +214,7 @@ function generateEntityDefFile(entityName: string, format: DataFormat, fields: s
   const mapping = Object.fromEntries(fields.map((f) => [f, f]));
 
   const config = {
+    name: entityName,
     dataFile: `${entityName}.${format}`,
     dataFormat: format,
     graphqlFile: `${entityName}.graphql`,

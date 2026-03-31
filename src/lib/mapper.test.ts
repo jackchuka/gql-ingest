@@ -76,7 +76,8 @@ describe("DataMapper", () => {
   describe("processEntity", () => {
     it("should process entity successfully", async () => {
       const mockConfig = {
-        csvFile: "users.csv",
+        name: "users",
+        dataFile: "users.csv",
         graphqlFile: "users.graphql",
         mapping: {
           name: "user_name",
@@ -103,10 +104,10 @@ describe("DataMapper", () => {
         createUser: { id: "123" },
       });
 
-      await dataMapper.processEntity("configs/test/users/users.json");
+      await dataMapper.processEntity("configs/test/users/entity.json");
 
       expect(mockFs.readFileSync).toHaveBeenCalledWith(
-        path.resolve(testBasePath, "configs/test/users/users.json"),
+        path.resolve(testBasePath, "configs/test/users/entity.json"),
         "utf8",
       );
       expect(DataReaderFactory.getReader).toHaveBeenCalledWith(
@@ -141,7 +142,8 @@ describe("DataMapper", () => {
 
     it("should handle GraphQL execution errors gracefully", async () => {
       const mockConfig = {
-        csvFile: "users.csv",
+        name: "users",
+        dataFile: "users.csv",
         graphqlFile: "users.graphql",
         mapping: { name: "user_name" },
       };
@@ -159,7 +161,7 @@ describe("DataMapper", () => {
 
       executeMutation.mockRejectedValue(new Error("GraphQL error"));
 
-      await dataMapper.processEntity("configs/test/users/users.json");
+      await dataMapper.processEntity("configs/test/users/entity.json");
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         "✗ Failed to create entity for row 1",
@@ -170,7 +172,8 @@ describe("DataMapper", () => {
 
     it("should map CSV columns to GraphQL variables correctly", async () => {
       const mockConfig = {
-        csvFile: "products.csv",
+        name: "products",
+        dataFile: "products.csv",
         graphqlFile: "products.graphql",
         mapping: {
           name: "product_name",
@@ -202,7 +205,7 @@ describe("DataMapper", () => {
         createProduct: { id: "456" },
       });
 
-      await dataMapper.processEntity("configs/test/products/products.json");
+      await dataMapper.processEntity("configs/test/products/entity.json");
 
       expect(executeMutation).toHaveBeenCalledWith(
         mockMutation,
@@ -218,7 +221,8 @@ describe("DataMapper", () => {
 
     it("should handle missing CSV columns gracefully", async () => {
       const mockConfig = {
-        csvFile: "users.csv",
+        name: "users",
+        dataFile: "users.csv",
         graphqlFile: "users.graphql",
         mapping: {
           name: "user_name",
@@ -243,7 +247,7 @@ describe("DataMapper", () => {
         createUser: { id: "789" },
       });
 
-      await dataMapper.processEntity("configs/test/users/users.json");
+      await dataMapper.processEntity("configs/test/users/entity.json");
 
       expect(executeMutation).toHaveBeenCalledWith(
         mockMutation,
@@ -258,7 +262,8 @@ describe("DataMapper", () => {
 
     it("should call metrics methods during successful processing", async () => {
       const mockConfig = {
-        csvFile: "users.csv",
+        name: "users",
+        dataFile: "users.csv",
         graphqlFile: "users.graphql",
         mapping: { name: "user_name" },
       };
@@ -278,7 +283,7 @@ describe("DataMapper", () => {
         createUser: { id: "123" },
       });
 
-      await dataMapper.processEntity("configs/test/users/users.json");
+      await dataMapper.processEntity("configs/test/users/entity.json");
 
       expect(startEntityProcessing).toHaveBeenCalledWith("users");
       expect(recordSuccess).toHaveBeenCalledTimes(2);
@@ -289,7 +294,8 @@ describe("DataMapper", () => {
 
     it("should call metrics methods during failed processing", async () => {
       const mockConfig = {
-        csvFile: "users.csv",
+        name: "users",
+        dataFile: "users.csv",
         graphqlFile: "users.graphql",
         mapping: { name: "user_name" },
       };
@@ -307,7 +313,7 @@ describe("DataMapper", () => {
 
       executeMutation.mockRejectedValue(new Error("GraphQL error"));
 
-      await dataMapper.processEntity("configs/test/users/users.json");
+      await dataMapper.processEntity("configs/test/users/entity.json");
 
       expect(startEntityProcessing).toHaveBeenCalledWith("users");
       expect(recordFailure).toHaveBeenCalledTimes(1);
@@ -323,7 +329,8 @@ describe("DataMapper", () => {
 
     it("should convert numeric types from CSV strings to proper GraphQL types", async () => {
       const mockConfig = {
-        csvFile: "products.csv",
+        name: "products",
+        dataFile: "products.csv",
         graphqlFile: "products.graphql",
         mapping: {
           name: "product_name",
@@ -361,7 +368,7 @@ describe("DataMapper", () => {
         createProduct: { id: "123" },
       });
 
-      await dataMapper.processEntity("configs/test/products/products.json");
+      await dataMapper.processEntity("configs/test/products/entity.json");
 
       expect(executeMutation).toHaveBeenCalledWith(
         mockMutation,
@@ -378,7 +385,8 @@ describe("DataMapper", () => {
 
     it("should handle invalid numeric conversions gracefully", async () => {
       const mockConfig = {
-        csvFile: "products.csv",
+        name: "products",
+        dataFile: "products.csv",
         graphqlFile: "products.graphql",
         mapping: {
           name: "product_name",
@@ -414,7 +422,7 @@ describe("DataMapper", () => {
         createProduct: { id: "123" },
       });
 
-      await dataMapper.processEntity("configs/test/products/products.json");
+      await dataMapper.processEntity("configs/test/products/entity.json");
 
       expect(executeMutation).toHaveBeenCalledWith(
         mockMutation,
@@ -437,7 +445,8 @@ describe("DataMapper", () => {
 
     it("should handle edge cases in numeric conversion safely", async () => {
       const mockConfig = {
-        csvFile: "products.csv",
+        name: "products",
+        dataFile: "products.csv",
         graphqlFile: "products.graphql",
         mapping: {
           int_field: "int_value",
@@ -475,7 +484,7 @@ describe("DataMapper", () => {
         createProduct: { id: "123" },
       });
 
-      await dataMapper.processEntity("configs/test/products/products.json");
+      await dataMapper.processEntity("configs/test/products/entity.json");
 
       // Should keep invalid values as strings
       expect(executeMutation).toHaveBeenCalledWith(
@@ -501,7 +510,8 @@ describe("DataMapper", () => {
 
     it("should keep unknown scalar types as strings", async () => {
       const mockConfig = {
-        csvFile: "products.csv",
+        name: "products",
+        dataFile: "products.csv",
         graphqlFile: "products.graphql",
         mapping: {
           name: "product_name",
@@ -537,7 +547,7 @@ describe("DataMapper", () => {
 
       const verboseMapper = new DataMapper(mockClient, testBasePath, mockMetrics, mockLogger);
 
-      await verboseMapper.processEntity("configs/test/products/products.json");
+      await verboseMapper.processEntity("configs/test/products/entity.json");
 
       // Should keep custom scalar as string
       expect(executeMutation).toHaveBeenCalledWith(

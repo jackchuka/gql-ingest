@@ -3,12 +3,15 @@ import { Logger } from "./logger";
 import { ProcessingMetrics } from "./metrics";
 
 // Mock dependencies
+jest.mock("fs");
 jest.mock("./graphql-client");
 jest.mock("./mapper");
 jest.mock("./metrics");
 jest.mock("./dependency-resolver");
 jest.mock("./config");
 
+import fs from "fs";
+import path from "path";
 import { GraphQLClientWrapper } from "./graphql-client";
 import { DataMapper } from "./mapper";
 import { MetricsCollector } from "./metrics";
@@ -119,6 +122,18 @@ describe("GQLIngest", () => {
     mockLoadConfig.mockReturnValue(defaultConfig);
     mockGetEntityConfig.mockReturnValue(defaultConfig.parallelProcessing);
     mockGetRetryConfig.mockReturnValue(defaultConfig.retry);
+
+    // Mock fs.readFileSync to return entity configs with name fields
+    const mockFs = fs as jest.Mocked<typeof fs>;
+    mockFs.readFileSync.mockImplementation((filePath: any) => {
+      const dir = path.basename(path.dirname(String(filePath)));
+      return JSON.stringify({
+        name: dir,
+        dataFile: `${dir}.csv`,
+        graphqlFile: `${dir}.graphql`,
+        mapping: {},
+      });
+    });
   });
 
   describe("constructor", () => {
@@ -194,10 +209,7 @@ describe("GQLIngest", () => {
       mockResolverInstance.validateDependencies.mockReturnValue([]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest([
-        "/path/users/users.json",
-        "/path/orders/orders.json",
-      ]);
+      const result = await ingest.ingest(["/path/users/entity.json", "/path/orders/entity.json"]);
 
       expect(result.success).toBe(true);
       expect(result.metrics).toEqual(defaultMetrics);
@@ -222,7 +234,7 @@ describe("GQLIngest", () => {
       ]);
 
       const ingest = new GQLIngest(defaultOptions);
-      await ingest.ingest(["/path/users/users.json"], { format: "yaml" });
+      await ingest.ingest(["/path/users/entity.json"], { format: "yaml" });
 
       // The second DataMapper instantiation (in ingest) should use the format
       expect(MockDataMapper).toHaveBeenLastCalledWith(
@@ -240,7 +252,7 @@ describe("GQLIngest", () => {
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest(["/path/users/users.json"]);
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       expect(result.success).toBe(false);
       expect(result.errors).toContain(
@@ -256,7 +268,7 @@ describe("GQLIngest", () => {
       processEntityMock.mockRejectedValue(new Error("Unexpected error"));
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest(["/path/users/users.json"]);
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       // Entity-level errors are caught per-entity, so this still succeeds
       expect(result.success).toBe(true);
@@ -281,9 +293,9 @@ describe("GQLIngest", () => {
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
       await ingest.ingest([
-        "/path/users/users.json",
-        "/path/orders/orders.json",
-        "/path/payments/payments.json",
+        "/path/users/entity.json",
+        "/path/orders/entity.json",
+        "/path/payments/entity.json",
       ]);
 
       expect(mockLogger.info).toHaveBeenCalledWith("Processing 2 dependency waves...");
@@ -299,7 +311,7 @@ describe("GQLIngest", () => {
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest(["/path/users/users.json"]);
+      await ingest.ingest(["/path/users/entity.json"]);
 
       expect(finishProcessingMock).toHaveBeenCalled();
     });
@@ -311,7 +323,7 @@ describe("GQLIngest", () => {
       processEntityMock.mockRejectedValue(new Error("Processing failed"));
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest(["/path/users/users.json"]);
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       // Should still succeed overall as errors are caught per-entity
       expect(result.success).toBe(true);
@@ -326,7 +338,7 @@ describe("GQLIngest", () => {
       ]);
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest(["/path/users/users.json"], { config: "/path/config.yaml" });
+      await ingest.ingest(["/path/users/entity.json"], { config: "/path/config.yaml" });
 
       expect(mockLoadConfig).toHaveBeenCalledWith("/path/config.yaml", mockLogger);
     });
@@ -461,14 +473,10 @@ Processing Complete:
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest(["/path/orders/orders.json"]);
+      await ingest.ingest(["/path/orders/entity.json"]);
 
       // DependencyResolver should only receive dependencies for the provided entities
-      expect(MockDependencyResolver).toHaveBeenCalledWith(
-        ["orders"],
-        { orders: ["users"] },
-        false,
-      );
+      expect(MockDependencyResolver).toHaveBeenCalledWith(["orders"], { orders: ["users"] }, false);
     });
 
     it("should pass allowPartialResolution=false", async () => {
@@ -485,10 +493,7 @@ Processing Complete:
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      await ingest.ingest([
-        "/path/users/users.json",
-        "/path/orders/orders.json",
-      ]);
+      await ingest.ingest(["/path/users/entity.json", "/path/orders/entity.json"]);
 
       expect(MockDependencyResolver).toHaveBeenCalledWith(
         ["users", "orders"],
@@ -514,10 +519,10 @@ Processing Complete:
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
       await ingest.ingest([
-        "/path/entity1/entity1.json",
-        "/path/entity2/entity2.json",
-        "/path/entity3/entity3.json",
-        "/path/entity4/entity4.json",
+        "/path/entity1/entity.json",
+        "/path/entity2/entity.json",
+        "/path/entity3/entity.json",
+        "/path/entity4/entity.json",
       ]);
 
       // All 4 entities should be processed
@@ -535,13 +540,11 @@ Processing Complete:
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest(["/path/users/users.json"]);
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       // Per-entity errors are caught, so overall still succeeds
       expect(result.success).toBe(true);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("String error"),
-      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("String error"));
     });
 
     it("should reset metrics for each ingest call", async () => {
@@ -552,10 +555,10 @@ Processing Complete:
       const ingest = new GQLIngest(defaultOptions);
 
       // First ingest
-      await ingest.ingest(["/path/users/users.json"]);
+      await ingest.ingest(["/path/users/entity.json"]);
 
       // Second ingest
-      await ingest.ingest(["/path/users/users.json"]);
+      await ingest.ingest(["/path/users/entity.json"]);
 
       // MetricsCollector should be instantiated for each ingest call
       // (once in constructor + twice for ingest calls)
@@ -573,7 +576,7 @@ Processing Complete:
       });
 
       const ingest = new GQLIngest({ ...defaultOptions, logger: mockLogger });
-      const result = await ingest.ingest(["/path/users/users.json"]);
+      const result = await ingest.ingest(["/path/users/entity.json"]);
 
       expect(result.success).toBe(true);
       expect(MockDependencyResolver).toHaveBeenCalledWith(["users"], {}, false);

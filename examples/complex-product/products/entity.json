@@ -1,4 +1,5 @@
 {
+  "name": "products",
   "dataFile": "products-data.json",
   "dataFormat": "json",
   "graphqlFile": "newProduct.graphql",

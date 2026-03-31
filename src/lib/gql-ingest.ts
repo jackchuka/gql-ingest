@@ -5,7 +5,9 @@ import { MetricsCollector, ProcessingMetrics } from "./metrics";
 import { DependencyResolver } from "./dependency-resolver";
 import { loadConfig, getEntityConfig, getRetryConfig, Config } from "./config";
 import { Logger, noopLogger } from "./logger";
-import { basename } from "path";
+import fs from "fs";
+import path from "path";
+import { MappingConfig } from "./mapper";
 import {
   GQLIngestEventMap,
   EventOptions,
@@ -41,6 +43,8 @@ export interface IngestOptions {
   config?: string;
   /** Override data format detection for this operation */
   format?: string;
+  /** Filter to only process entities with these names */
+  entities?: string[];
   /** AbortSignal for external cancellation */
   signal?: AbortSignal;
 }
@@ -280,12 +284,23 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
         };
       }
 
-      // Entity names derived from file paths
-      const entityNames = entityFiles.map((f) => basename(f, ".json"));
+      // Read entity names from files
+      const entityFilter = options?.entities ? new Set(options.entities) : null;
+      const entityNames: string[] = [];
+      const pathMap = new Map<string, string>();
+      for (const file of entityFiles) {
+        const fullPath = path.resolve(process.cwd(), file);
+        const entityConfig: MappingConfig = JSON.parse(fs.readFileSync(fullPath, "utf8"));
+        if (!entityConfig.name) {
+          throw new Error(`Missing "name" field in entity file: ${file}`);
+        }
+        if (entityFilter && !entityFilter.has(entityConfig.name)) {
+          continue;
+        }
+        entityNames.push(entityConfig.name);
+        pathMap.set(entityConfig.name, file);
+      }
       this.totalEntities = entityNames.length;
-
-      // Build path map from entity names to file paths
-      const pathMap = new Map(entityNames.map((name, i) => [name, entityFiles[i]]));
 
       // Filter dependencies to only include those relevant to selected entities
       const relevantDependencies: Record<string, string[]> = {};
@@ -298,11 +313,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
       }
 
       // Setup dependency resolver with filtered dependencies
-      const resolver = new DependencyResolver(
-        entityNames,
-        relevantDependencies,
-        false,
-      );
+      const resolver = new DependencyResolver(entityNames, relevantDependencies, false);
 
       // Validate dependencies
       const validationErrors = resolver.validateDependencies();

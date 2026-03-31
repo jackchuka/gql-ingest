@@ -20,10 +20,7 @@ async function main() {
   try {
     // Example 1: Ingest all entity files
     console.log("Starting full data ingestion...");
-    const fullResult = await client.ingest([
-      "./users/users.json",
-      "./products/products.json",
-    ]);
+    const fullResult = await client.ingest(["./users/entity.json", "./products/entity.json"]);
 
     if (fullResult.success) {
       console.log("Full ingestion completed successfully");
@@ -34,7 +31,7 @@ async function main() {
 
     // Example 2: Ingest a subset of entity files
     console.log("\nProcessing specific entities...");
-    const partialResult = await client.ingest(["./users/users.json"]);
+    const partialResult = await client.ingest(["./users/entity.json"]);
 
     if (partialResult.success) {
       console.log("Partial ingestion completed successfully");
@@ -48,7 +45,7 @@ async function main() {
     // Example 3: Using options for more control
     console.log("\nIngesting with custom options...");
     const customResult = await client.ingest(
-      ["./orders/orders.json", "./order_items/order_items.json"],
+      ["./orders/entity.json", "./order_items/entity.json"],
       {
         config: "./config.yaml",
         format: "csv",

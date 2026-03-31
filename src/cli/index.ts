@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import path from "path";
 import { GQLIngest } from "../lib/gql-ingest";
 import { createConsoleLogger, noopLogger } from "../lib/logger";
 import { registerInitCommand } from "./commands/init";
@@ -21,7 +20,10 @@ registerAddCommand(program);
 
 // Main ingest options on root command
 program
-  .argument("[entityFiles...]", "Entity file paths (JSON files defining data source, mutation, and field mapping)")
+  .argument(
+    "[entityFiles...]",
+    "Entity file paths (JSON files defining data source, mutation, and field mapping)",
+  )
   .option("-e, --endpoint <url>", "GraphQL endpoint URL")
   .option(
     "-c, --config <path>",
@@ -54,19 +56,13 @@ program
         formatOverride: options.format,
       });
 
-      let filesToProcess = entityFiles;
-      if (options.entities) {
-        const filterNames = new Set(
-          options.entities.split(",").map((e: string) => e.trim()),
-        );
-        filesToProcess = entityFiles.filter((f: string) => {
-          const name = path.basename(f, ".json");
-          return filterNames.has(name);
-        });
-      }
+      const entities = options.entities
+        ? options.entities.split(",").map((e: string) => e.trim())
+        : undefined;
 
-      const result = await client.ingest(filesToProcess, {
+      const result = await client.ingest(entityFiles, {
         config: options.config,
+        entities,
       });
 
       logger.info(client.getMetricsSummary());

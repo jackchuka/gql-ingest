@@ -20,10 +20,7 @@ export const DEFAULT_CONFIG: Config = {
   entityDependencies: {},
 };
 
-export function loadConfig(
-  configFile?: string,
-  logger: Logger = noopLogger,
-): Config {
+export function loadConfig(configFile?: string, logger: Logger = noopLogger): Config {
   if (!configFile) {
     logger.info("No config file provided, using defaults");
     return DEFAULT_CONFIG;

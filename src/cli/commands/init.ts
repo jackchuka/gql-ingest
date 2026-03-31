@@ -77,7 +77,7 @@ export function registerInitCommand(program: Command): void {
         logger.info("");
         logger.info("Next steps:");
         logger.info("  1. Edit entity files in each entity directory");
-        logger.info(`  2. Run: gql-ingest -e <endpoint> ${resolvedPath}/example/example.json`);
+        logger.info(`  2. Run: gql-ingest -e <endpoint> ${resolvedPath}/example/entity.json`);
       } catch (error) {
         if (error instanceof Error && error.name === "ExitPromptError") {
           // User cancelled the prompt
