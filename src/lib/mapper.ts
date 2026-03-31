@@ -13,12 +13,29 @@ import {
   RowFailureEventPayload,
 } from "./events";
 
+export interface OutputCaptureConfig {
+  /** JSONPath into the input row for the lookup key (e.g., "$.legalName") */
+  key: string;
+  /** Map of field names to JSONPaths into the mutation response */
+  fields: Record<string, string>;
+}
+
+export type OutputStore = Map<string, Map<string, Record<string, unknown>>>;
+
+class RefResolutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RefResolutionError";
+  }
+}
+
 export interface MappingConfig {
   name: string;
   dataFile: string;
   dataFormat?: string;
   graphqlFile: string;
   mapping: Record<string, unknown>;
+  outputCapture?: OutputCaptureConfig;
 }
 
 /**
@@ -72,6 +89,7 @@ export class DataMapper {
     retryConfig?: RetryConfig,
     signal?: AbortSignal,
     callbacks?: EntityProcessingCallbacks,
+    outputStore?: OutputStore,
   ): Promise<void> {
     const entityStartTime = Date.now();
 
@@ -103,7 +121,6 @@ export class DataMapper {
       totalRows: data.length,
     });
 
-    // Process rows with optional parallelization
     if (parallelConfig && parallelConfig.concurrency > 1) {
       await this.processRowsConcurrentlyWithEvents(
         data,
@@ -114,6 +131,8 @@ export class DataMapper {
         retryConfig,
         signal,
         callbacks,
+        config.outputCapture,
+        outputStore,
       );
     } else {
       await this.processRowsSequentiallyWithEvents(
@@ -124,6 +143,8 @@ export class DataMapper {
         retryConfig,
         signal,
         callbacks,
+        config.outputCapture,
+        outputStore,
       );
     }
 
@@ -162,6 +183,8 @@ export class DataMapper {
     retryConfig?: RetryConfig,
     signal?: AbortSignal,
     callbacks?: EntityProcessingCallbacks,
+    outputCapture?: OutputCaptureConfig,
+    outputStore?: OutputStore,
   ): Promise<void> {
     const totalRows = data.length;
     const variableTypes = this.extractVariableTypes(mutation);
@@ -174,12 +197,14 @@ export class DataMapper {
       }
 
       const row = data[i];
-      const variables = this.mapRowToVariables(row, mapping, variableTypes);
       const rowStartTime = Date.now();
 
       try {
+        const variables = this.mapRowToVariables(row, mapping, variableTypes, outputStore);
         const result = await this.client.executeMutation(mutation, variables, retryConfig, signal);
         this.metrics.recordSuccess(entityName);
+
+        this.captureOutput(row, result, entityName, outputCapture, outputStore);
 
         // Emit row success event
         callbacks?.onRowSuccess?.({
@@ -226,6 +251,8 @@ export class DataMapper {
     retryConfig?: RetryConfig,
     signal?: AbortSignal,
     callbacks?: EntityProcessingCallbacks,
+    outputCapture?: OutputCaptureConfig,
+    outputStore?: OutputStore,
   ): Promise<void> {
     const concurrency = parallelConfig.concurrency;
     this.logger.info(`Processing ${data.length} rows with concurrency: ${concurrency}`);
@@ -250,10 +277,10 @@ export class DataMapper {
 
       const promises = chunk.map(async (row, index) => {
         const rowIndex = chunkStartIndex + index;
-        const variables = this.mapRowToVariables(row, mapping, variableTypes);
         const rowStartTime = Date.now();
 
         try {
+          const variables = this.mapRowToVariables(row, mapping, variableTypes, outputStore);
           const result = await this.client.executeMutation(
             mutation,
             variables,
@@ -261,6 +288,8 @@ export class DataMapper {
             signal,
           );
           this.metrics.recordSuccess(entityName);
+
+          this.captureOutput(row, result, entityName, outputCapture, outputStore);
 
           // Emit row success event
           callbacks?.onRowSuccess?.({
@@ -338,6 +367,7 @@ export class DataMapper {
     row: DataRow,
     mapping: Record<string, unknown>,
     variableTypes: Record<string, string>,
+    outputStore?: OutputStore,
   ): Record<string, any> {
     const variables: Record<string, any> = {};
 
@@ -349,7 +379,7 @@ export class DataMapper {
       }
       // Handle path-based mapping for nested data (e.g., "input.name": "$.product.name")
       else if (typeof mappingValue === "string" && mappingValue.startsWith("$.")) {
-        const dataPath = mappingValue.substring(2); // Remove '$.'
+        const dataPath = this.stripJsonPathPrefix(mappingValue);
         const value = this.getValueByPath(row, dataPath);
         if (value !== undefined) {
           const type = variableTypes[graphqlVar];
@@ -361,10 +391,12 @@ export class DataMapper {
         const rawValue = row[mappingValue];
         const type = variableTypes[graphqlVar];
         variables[graphqlVar] = this.convertValue(rawValue, type, graphqlVar);
+      } else if (this.isRefMapping(mappingValue)) {
+        variables[graphqlVar] = this.resolveRef(row, mappingValue, outputStore);
       }
       // Handle complex mapping object
       else if (typeof mappingValue === "object" && mappingValue !== null) {
-        variables[graphqlVar] = this.mapNestedObject(row, mappingValue, variableTypes);
+        variables[graphqlVar] = this.mapNestedObject(row, mappingValue, variableTypes, outputStore);
       }
     }
 
@@ -390,16 +422,21 @@ export class DataMapper {
     row: DataRow,
     mappingObj: any,
     variableTypes: Record<string, string>,
+    outputStore?: OutputStore,
   ): any {
     if (Array.isArray(mappingObj)) {
-      return mappingObj.map((item) => this.mapNestedObject(row, item, variableTypes));
+      return mappingObj.map((item) => this.mapNestedObject(row, item, variableTypes, outputStore));
     }
 
     if (typeof mappingObj === "object" && mappingObj !== null) {
+      if (this.isRefMapping(mappingObj)) {
+        return this.resolveRef(row, mappingObj, outputStore);
+      }
+
       const result: any = {};
       for (const [key, value] of Object.entries(mappingObj)) {
         if (typeof value === "string" && value.startsWith("$.")) {
-          const dataPath = value.substring(2);
+          const dataPath = this.stripJsonPathPrefix(value);
           let fieldValue = this.getValueByPath(row, dataPath);
 
           // Handle special case for array fields (e.g., comma-separated values)
@@ -410,8 +447,10 @@ export class DataMapper {
           result[key] = fieldValue;
         } else if (typeof value === "string" && row[value] !== undefined) {
           result[key] = row[value];
+        } else if (this.isRefMapping(value)) {
+          result[key] = this.resolveRef(row, value, outputStore);
         } else if (typeof value === "object") {
-          result[key] = this.mapNestedObject(row, value, variableTypes);
+          result[key] = this.mapNestedObject(row, value, variableTypes, outputStore);
         } else {
           result[key] = value;
         }
@@ -420,6 +459,102 @@ export class DataMapper {
     }
 
     return mappingObj;
+  }
+
+  private stripJsonPathPrefix(jsonPath: string): string {
+    return jsonPath.startsWith("$.") ? jsonPath.substring(2) : jsonPath;
+  }
+
+  private isRefMapping(value: unknown): value is { $ref: string; key: string; field: string } {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      "$ref" in value &&
+      "key" in value &&
+      "field" in value
+    );
+  }
+
+  private resolveRef(
+    row: DataRow,
+    ref: { $ref: string; key: string; field: string },
+    outputStore?: OutputStore,
+  ): unknown {
+    if (!outputStore) {
+      throw new RefResolutionError(`$ref to "${ref.$ref}" found but no output store is available`);
+    }
+
+    const keyPath = this.stripJsonPathPrefix(ref.key);
+    const lookupKeyValue = this.getValueByPath(row, keyPath);
+
+    if (lookupKeyValue === undefined) {
+      throw new RefResolutionError(`$ref lookup key "${ref.key}" not found in current row`);
+    }
+
+    const keyStr = String(lookupKeyValue);
+    const entityStore = outputStore.get(ref.$ref);
+
+    if (!entityStore) {
+      throw new RefResolutionError(`$ref entity "${ref.$ref}" not found in output store`);
+    }
+
+    const captured = entityStore.get(keyStr);
+    if (!captured) {
+      throw new RefResolutionError(
+        `$ref key "${keyStr}" not found in entity "${ref.$ref}" output store`,
+      );
+    }
+
+    const value = captured[ref.field];
+    if (value === undefined) {
+      throw new RefResolutionError(
+        `$ref field "${ref.field}" not found in captured output for "${ref.$ref}[${keyStr}]"`,
+      );
+    }
+
+    return value;
+  }
+
+  private captureOutput(
+    row: DataRow,
+    result: any,
+    entityName: string,
+    outputCapture?: OutputCaptureConfig,
+    outputStore?: OutputStore,
+  ): void {
+    if (!outputCapture || !outputStore) return;
+
+    const keyPath = this.stripJsonPathPrefix(outputCapture.key);
+    const keyValue = this.getValueByPath(row, keyPath);
+
+    if (keyValue === undefined) {
+      this.logger.warn(
+        `outputCapture key "${outputCapture.key}" not found in input row for entity "${entityName}". Skipping capture.`,
+      );
+      return;
+    }
+
+    const keyStr = String(keyValue);
+
+    const captured: Record<string, unknown> = {};
+    for (const [fieldName, responsePath] of Object.entries(outputCapture.fields)) {
+      const dataPath = this.stripJsonPathPrefix(responsePath);
+      captured[fieldName] = this.getValueByPath(result, dataPath);
+    }
+
+    let entityStore = outputStore.get(entityName);
+    if (!entityStore) {
+      entityStore = new Map();
+      outputStore.set(entityName, entityStore);
+    }
+
+    if (entityStore.has(keyStr)) {
+      this.logger.warn(
+        `outputCapture: duplicate key "${keyStr}" for entity "${entityName}" — overwriting previous value`,
+      );
+    }
+    entityStore.set(keyStr, captured);
   }
 
   private extractVariableTypes(mutation: string): Record<string, string> {

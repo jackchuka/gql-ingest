@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
 import { GraphQLClientWrapper } from "./graphql-client";
-import { DataMapper } from "./mapper";
+import { DataMapper, OutputStore } from "./mapper";
 import { MetricsCollector, ProcessingMetrics } from "./metrics";
 import { DependencyResolver } from "./dependency-resolver";
 import { loadConfig, getEntityConfig, getRetryConfig, Config } from "./config";
@@ -76,6 +76,8 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
   private client: GraphQLClientWrapper;
   private mapper: DataMapper;
   private eventOptions: Required<EventOptions>;
+
+  private outputStore: OutputStore = new Map();
 
   // Cancellation state
   private abortController: AbortController | null = null;
@@ -252,8 +254,9 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
         return this.handleCancellation(signal.reason);
       }
 
-      // Reset metrics for new operation
+      // Reset state for new operation
       this.metrics = new MetricsCollector();
+      this.outputStore = new Map();
 
       // Update client and mapper with new metrics and logger
       this.client = new GraphQLClientWrapper(
@@ -353,6 +356,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
         config,
         this.logger,
         signal,
+        this.outputStore,
       );
 
       // Check if cancelled during processing
@@ -484,6 +488,7 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
     config: Config,
     logger: Logger,
     signal?: AbortSignal,
+    outputStore?: OutputStore,
   ): Promise<void> {
     const waves = resolver.resolveExecutionOrder();
 
@@ -522,23 +527,30 @@ export class GQLIngest extends EventEmitter<GQLIngestEventMap> {
               const retryConfig = getRetryConfig(entityName, config);
 
               // Process entity with event callbacks
-              await mapper.processEntityWithEvents(configPath, entityConfig, retryConfig, signal, {
-                onEntityStart: (payload) =>
-                  this.safeEmit("entityStart", {
-                    ...payload,
-                    waveIndex: wave.wave,
-                  }),
-                onEntityComplete: (payload) => {
-                  this.entitiesCompleted++;
-                  this.safeEmit("entityComplete", payload);
+              await mapper.processEntityWithEvents(
+                configPath,
+                entityConfig,
+                retryConfig,
+                signal,
+                {
+                  onEntityStart: (payload) =>
+                    this.safeEmit("entityStart", {
+                      ...payload,
+                      waveIndex: wave.wave,
+                    }),
+                  onEntityComplete: (payload) => {
+                    this.entitiesCompleted++;
+                    this.safeEmit("entityComplete", payload);
+                  },
+                  onRowSuccess: this.eventOptions.emitRowEvents
+                    ? (payload) => this.safeEmit("rowSuccess", payload)
+                    : undefined,
+                  onRowFailure: this.eventOptions.emitRowEvents
+                    ? (payload) => this.safeEmit("rowFailure", payload)
+                    : undefined,
                 },
-                onRowSuccess: this.eventOptions.emitRowEvents
-                  ? (payload) => this.safeEmit("rowSuccess", payload)
-                  : undefined,
-                onRowFailure: this.eventOptions.emitRowEvents
-                  ? (payload) => this.safeEmit("rowFailure", payload)
-                  : undefined,
-              });
+                outputStore,
+              );
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               logger.warn(`Warning: Could not process ${configPath}: ${message}`);
