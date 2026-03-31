@@ -400,6 +400,12 @@ export class DataMapper {
       }
     }
 
+    if (outputStore) {
+      for (const [key, value] of Object.entries(variables)) {
+        variables[key] = this.resolveRefsInData(value, row, outputStore);
+      }
+    }
+
     return variables;
   }
 
@@ -461,6 +467,43 @@ export class DataMapper {
     return mappingObj;
   }
 
+  /**
+   * Recursively walk a resolved value and resolve any $ref objects found in data.
+   * Unlike mapping-level $ref (where key is a JSONPath into the row), data-level
+   * $ref uses key as a literal lookup value unless it starts with "$.".
+   */
+  private resolveRefsInData(value: unknown, row: DataRow, outputStore: OutputStore): unknown {
+    if (Array.isArray(value)) {
+      let changed = false;
+      const mapped = value.map((item) => {
+        const resolved = this.resolveRefsInData(item, row, outputStore);
+        if (resolved !== item) changed = true;
+        return resolved;
+      });
+      return changed ? mapped : value;
+    }
+
+    if (typeof value === "object" && value !== null) {
+      if (this.isRefMapping(value)) {
+        const keyStr = value.key.startsWith("$.")
+          ? String(this.getValueByPath(row, this.stripJsonPathPrefix(value.key)) ?? value.key)
+          : value.key;
+        return this.lookupRef(outputStore, value.$ref, keyStr, value.field);
+      }
+
+      let changed = false;
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value)) {
+        const resolved = this.resolveRefsInData(v, row, outputStore);
+        if (resolved !== v) changed = true;
+        result[k] = resolved;
+      }
+      return changed ? result : value;
+    }
+
+    return value;
+  }
+
   private stripJsonPathPrefix(jsonPath: string): string {
     return jsonPath.startsWith("$.") ? jsonPath.substring(2) : jsonPath;
   }
@@ -476,6 +519,7 @@ export class DataMapper {
     );
   }
 
+  /** Resolve a mapping-level $ref — throws on any failure so the row is skipped. */
   private resolveRef(
     row: DataRow,
     ref: { $ref: string; key: string; field: string },
@@ -493,23 +537,43 @@ export class DataMapper {
     }
 
     const keyStr = String(lookupKeyValue);
-    const entityStore = outputStore.get(ref.$ref);
+    const value = this.lookupRef(outputStore, ref.$ref, keyStr, ref.field);
 
+    if (value === undefined) {
+      throw new RefResolutionError(
+        `$ref resolution failed for "${ref.$ref}[${keyStr}].${ref.field}"`,
+      );
+    }
+
+    return value;
+  }
+
+  /**
+   * Core ref lookup: entityName -> key -> field.
+   * Returns undefined with a warning on miss (caller decides whether to throw).
+   */
+  private lookupRef(
+    outputStore: OutputStore,
+    entityName: string,
+    keyStr: string,
+    field: string,
+  ): unknown {
+    const entityStore = outputStore.get(entityName);
     if (!entityStore) {
-      throw new RefResolutionError(`$ref entity "${ref.$ref}" not found in output store`);
+      this.logger.warn(`$ref entity "${entityName}" not found in output store`);
+      return undefined;
     }
 
     const captured = entityStore.get(keyStr);
     if (!captured) {
-      throw new RefResolutionError(
-        `$ref key "${keyStr}" not found in entity "${ref.$ref}" output store`,
-      );
+      this.logger.warn(`$ref key "${keyStr}" not found in entity "${entityName}" output store`);
+      return undefined;
     }
 
-    const value = captured[ref.field];
+    const value = captured[field];
     if (value === undefined) {
-      throw new RefResolutionError(
-        `$ref field "${ref.field}" not found in captured output for "${ref.$ref}[${keyStr}]"`,
+      this.logger.warn(
+        `$ref field "${field}" not found in captured output for "${entityName}[${keyStr}]"`,
       );
     }
 

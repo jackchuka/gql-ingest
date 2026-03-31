@@ -33,6 +33,7 @@ pnpm run test -- -t "test name pattern"
 **Entry points:** `src/index.ts` (library exports), `src/cli/index.ts` (Commander.js CLI)
 
 **Core processing pipeline** (`src/lib/`):
+
 1. **`gql-ingest.ts`** — Main `GQLIngest` class (extends EventEmitter). Orchestrates ingestion: loads config, resolves entity dependencies into execution waves, processes entities wave-by-wave with abort support.
 2. **`dependency-resolver.ts`** — Topological sort producing `ExecutionWaves` (groups of entities that can run in parallel). Detects circular dependencies.
 3. **`mapper.ts`** — Reads entity config, loads data via readers, maps rows to GraphQL variables (supports JSONPath, direct mapping `$`, cross-entity `$ref`), executes mutations sequentially or concurrently in chunks.
