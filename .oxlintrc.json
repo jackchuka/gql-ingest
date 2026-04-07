@@ -15,7 +15,7 @@
       "files": ["**/*.test.ts"],
       "rules": {
         "no-new": "off",
-        "no-unsafe-type-assertion": "off",
+        "typescript/no-unsafe-type-assertion": "off",
         "unicorn/no-array-sort": "off"
       }
     },
