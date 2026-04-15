@@ -57,13 +57,13 @@ devDependencies:
     version: 0.20.0
   ts-jest:
     specifier: ^29.4.0
-    version: 29.4.9(@babel/core@7.29.0)(esbuild@0.28.0)(jest@30.3.0)(typescript@5.9.3)
+    version: 29.4.9(@babel/core@7.29.0)(esbuild@0.28.0)(jest@30.3.0)(typescript@6.0.2)
   ts-node:
     specifier: ^10.9.0
-    version: 10.9.2(@types/node@25.6.0)(typescript@5.9.3)
+    version: 10.9.2(@types/node@25.6.0)(typescript@6.0.2)
   typescript:
-    specifier: ^5.3.0
-    version: 5.9.3
+    specifier: ^6.0.2
+    version: 6.0.2
 
 packages:
 
@@ -2765,7 +2765,7 @@ packages:
       pretty-format: 30.3.0
       slash: 3.0.0
       strip-json-comments: 3.1.1
-      ts-node: 10.9.2(@types/node@25.6.0)(typescript@5.9.3)
+      ts-node: 10.9.2(@types/node@25.6.0)(typescript@6.0.2)
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
@@ -3682,7 +3682,7 @@ packages:
       is-number: 7.0.0
     dev: true
 
-  /ts-jest@29.4.9(@babel/core@7.29.0)(esbuild@0.28.0)(jest@30.3.0)(typescript@5.9.3):
+  /ts-jest@29.4.9(@babel/core@7.29.0)(esbuild@0.28.0)(jest@30.3.0)(typescript@6.0.2):
     resolution: {integrity: sha512-LTb9496gYPMCqjeDLdPrKuXtncudeV1yRZnF4Wo5l3SFi0RYEnYRNgMrFIdg+FHvfzjCyQk1cLncWVqiSX+EvQ==}
     engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
@@ -3720,11 +3720,11 @@ packages:
       make-error: 1.3.6
       semver: 7.7.4
       type-fest: 4.41.0
-      typescript: 5.9.3
+      typescript: 6.0.2
       yargs-parser: 21.1.1
     dev: true
 
-  /ts-node@10.9.2(@types/node@25.6.0)(typescript@5.9.3):
+  /ts-node@10.9.2(@types/node@25.6.0)(typescript@6.0.2):
     resolution: {integrity: sha512-f0FFpIdcHgn8zcPSbf1dRevwt047YMnaiJM3u2w2RewrB+fob/zePZcrOyQoLMMO7aBIddLcQIEK5dYjkLnGrQ==}
     hasBin: true
     peerDependencies:
@@ -3750,7 +3750,7 @@ packages:
       create-require: 1.1.1
       diff: 4.0.2
       make-error: 1.3.6
-      typescript: 5.9.3
+      typescript: 6.0.2
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
     dev: true
@@ -3776,8 +3776,8 @@ packages:
     engines: {node: '>=16'}
     dev: true
 
-  /typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+  /typescript@6.0.2:
+    resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
     engines: {node: '>=14.17'}
     hasBin: true
     dev: true

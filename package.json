@@ -63,7 +63,7 @@
     "oxlint-tsgolint": "^0.20.0",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.0",
-    "typescript": "^5.3.0"
+    "typescript": "^6.0.2"
   },
   "engines": {
     "node": ">=18"
