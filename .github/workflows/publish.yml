@@ -20,10 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Read pnpm version from packageManager
+        id: pnpm-version
+        run: echo "version=$(jq -r '.packageManager | split("@")[1]' package.json)" >> "$GITHUB_OUTPUT"
+
       - uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
         name: Install pnpm
         with:
-          version: 10
+          version: ${{ steps.pnpm-version.outputs.version }}
           run_install: false
 
       - name: Install Node.js
