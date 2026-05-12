@@ -16,7 +16,7 @@ importers:
         version: 14.0.3
       csv-parser:
         specifier: ^3.0.0
-        version: 3.2.0
+        version: 3.2.1
       graphql:
         specifier: 16.13.2
         version: 16.13.2
@@ -1282,8 +1282,8 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
 
-  csv-parser@3.2.0:
-    resolution: {integrity: sha512-fgKbp+AJbn1h2dcAHKIdKNSSjfp43BZZykXsCjzALjKy80VXQNHPFJ6T9Afwdzoj24aMkq8GwDS7KGcDPpejrA==}
+  csv-parser@3.2.1:
+    resolution: {integrity: sha512-v8RPMSglouR9od735SnwSxLBbCJqEPSbgm1R5qfr8yIiMUCEFjox56kRZid0SvgHJEkxeIEu3+a9QS3YRh7CuA==}
     engines: {node: '>= 10'}
     hasBin: true
 
@@ -3182,7 +3182,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  csv-parser@3.2.0: {}
+  csv-parser@3.2.1: {}
 
   debug@4.4.3:
     dependencies:
