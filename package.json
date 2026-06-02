@@ -46,7 +46,7 @@
     "@inquirer/prompts": "^8.2.0",
     "commander": "^14.0.0",
     "csv-parser": "^3.0.0",
-    "graphql": "16.14.0",
+    "graphql": "16.14.1",
     "graphql-request": "^7.2.0",
     "js-yaml": "^4.1.0",
     "tinyglobby": "^0.2.15",
