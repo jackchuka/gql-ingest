@@ -48,7 +48,7 @@
     "csv-parser": "^3.0.0",
     "graphql": "16.14.2",
     "graphql-request": "^7.2.0",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^5.0.0",
     "tinyglobby": "^0.2.15",
     "zod": "^4.3.5"
   },
