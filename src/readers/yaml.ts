@@ -1,5 +1,5 @@
 import fs from "fs/promises";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { DataReader, DataRow } from "./data-reader";
 
 export class YamlReader extends DataReader {
