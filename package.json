@@ -55,7 +55,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.0.2",
+    "@types/node": "^26.0.0",
     "esbuild": "^0.28.0",
     "jest": "^30.0.3",
     "oxfmt": "^0.55.0",
