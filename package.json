@@ -59,7 +59,7 @@
     "jest": "^30.0.3",
     "oxfmt": "^0.60.0",
     "oxlint": "^1.35.0",
-    "oxlint-tsgolint": "^0.25.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.0",
     "typescript": "^6.0.2"
