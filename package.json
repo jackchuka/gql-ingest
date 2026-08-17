@@ -57,7 +57,7 @@
     "@types/node": "^26.0.0",
     "esbuild": "^0.28.0",
     "jest": "^30.0.3",
-    "oxfmt": "^0.62.0",
+    "oxfmt": "^0.63.0",
     "oxlint": "^1.35.0",
     "oxlint-tsgolint": "^7.0.2001",
     "ts-jest": "^29.4.0",
