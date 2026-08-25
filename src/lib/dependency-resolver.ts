@@ -93,8 +93,8 @@ export class DependencyResolver {
 
   getDependents(entityName: string): string[] {
     return Object.entries(this.dependencies)
-      .filter(([_, deps]) => deps.includes(entityName))
-      .map(([entity, _]) => entity);
+      .filter(([, deps]) => deps.includes(entityName))
+      .map(([entity]) => entity);
   }
 
   getDependencies(entityName: string): string[] {

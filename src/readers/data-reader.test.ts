@@ -5,7 +5,7 @@ class TestReader extends DataReader {
     return ["test", "tst"];
   }
 
-  async readFile(_: string): Promise<any[]> {
+  async readFile(_filePath: string): Promise<any[]> {
     return [{ test: true }];
   }
 }
