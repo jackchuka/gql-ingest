@@ -34,12 +34,15 @@
     "lint": "oxlint --type-aware --tsconfig ./tsconfig.json",
     "lint:fix": "oxlint --fix --type-aware --tsconfig ./tsconfig.json",
     "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "typecheck": "tsc --noEmit",
     "build": "node esbuild.config.js",
     "build:types": "tsc --emitDeclarationOnly",
     "build:all": "pnpm run build && pnpm run build:types",
     "dev": "ts-node src/cli/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run fmt:check && pnpm test",
     "prepublishOnly": "pnpm run build:all"
   },
   "dependencies": {

@@ -658,6 +658,12 @@ pnpm run build:types # Generate TypeScript declarations
 pnpm run build:all   # Build bundle + types
 pnpm run dev         # Run in development mode
 pnpm run test        # Run test suite
+pnpm run lint        # Lint with oxlint
+pnpm run lint:fix    # Lint and auto-fix
+pnpm run fmt         # Format with oxfmt
+pnpm run fmt:check   # Check formatting
+pnpm run typecheck   # Type-check with tsc
+pnpm run check       # typecheck + lint + fmt:check + test
 ```
 
 ## How It Works

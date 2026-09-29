@@ -19,7 +19,10 @@ pnpm run test:watch     # jest --watch
 
 pnpm run lint           # oxlint
 pnpm run lint:fix       # oxlint --fix
-pnpm run fmt            # oxfmt
+pnpm run fmt            # oxfmt (write)
+pnpm run fmt:check      # oxfmt --check
+pnpm run typecheck      # tsc --noEmit
+pnpm run check          # typecheck + lint + fmt:check + test
 
 # Run a single test file
 pnpm run test -- src/lib/mapper.test.ts
