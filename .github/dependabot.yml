@@ -7,8 +7,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers:
-      - "jackchuka"
     commit-message:
       prefix: "deps"
       include: "scope"
@@ -23,8 +21,6 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
-    reviewers:
-      - "jackchuka"
     assignees:
       - "jackchuka"
     labels:
